@@ -5,6 +5,10 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+from dotenv import load_dotenv
+
+# Load .env file (for local use; Replit uses Secrets)
+load_dotenv()
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -93,7 +97,7 @@ def main():
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         logger.error("TELEGRAM_TOKEN not set!")
-        return
+        raise ValueError("Set TELEGRAM_TOKEN in .env or Replit Secrets")
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("register", register))
@@ -102,7 +106,7 @@ def main():
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("profit", profit))
     logger.info("Starting bot polling...")
-    threading.Thread(target=run_server, daemon=True).start()  # Start keep-alive server
+    threading.Thread(target=run_server, daemon=True).start()
     application.run_polling()
 
 if __name__ == "__main__":
