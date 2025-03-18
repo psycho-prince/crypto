@@ -3,7 +3,6 @@ import sqlite3
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from flask import Flask, request, render_template_string
 import threading
 import time
@@ -26,27 +25,33 @@ conn.commit()
 # Flask app for HTML UI
 app = Flask(__name__)
 
-# HTML template for Web App (simple tap-to-mine UI)
+# Enhanced HTML template with game-like UI
 html_template = """
 <!DOCTYPE html>
 <html>
 <head>
     <title>Crypto King</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; }
-        .container { margin-top: 50px; }
-        .coin { font-size: 48px; cursor: pointer; }
-        .stats { margin: 20px; font-size: 24px; }
-        button { padding: 10px 20px; font-size: 18px; }
+        body { font-family: Arial, sans-serif; text-align: center; background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; }
+        .container { margin-top: 20px; }
+        .coin { font-size: 100px; cursor: pointer; transition: transform 0.2s; }
+        .coin:hover { transform: scale(1.1); }
+        .stats { margin: 10px; font-size: 22px; background: rgba(0, 0, 0, 0.5); padding: 10px; border-radius: 10px; }
+        .message { color: #ffd700; font-size: 20px; }
+        .energy-bar { width: 200px; height: 20px; background: #ccc; border-radius: 10px; margin: 10px auto; }
+        .energy-fill { height: 100%; background: #00ff00; border-radius: 10px; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .pulse { animation: pulse 1s infinite; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>{{ lang == 'ml' and 'ക്രിപ്റ്റോ കിംഗ്' or 'Crypto King' }}</h1>
-        <div class="stats">Level: {{ level }} | Coins: {{ "%.4f"|format(coins) }} | Energy: {{ energy }}</div>
-        <div class="coin" onclick="mine()">💰</div>
-        <p>{{ lang == 'ml' and 'കോയിനുകൾ നേടാൻ ടാപ്പ് ചെയ്യൂ!' or 'Tap to Earn Coins!' }}</p>
-        <div id="message"></div>
+        <h1>{{ lang == 'ml' and 'ക്രിപ്റ്റോ രാജാവ്' or 'Crypto King' }}</h1>
+        <div class="stats">👑 Level: {{ level }} | 💰 Coins: {{ "%.4f"|format(coins) }} </div>
+        <div class="energy-bar"><div class="energy-fill" style="width: {{ energy }}%;"></div></div>
+        <div class="stats">⚡ Energy: {{ energy }}/100</div>
+        <div class="coin pulse" onclick="mine()">💰</div>
+        <div id="message" class="message"></div>
     </div>
     <script>
         function mine() {
@@ -55,7 +60,7 @@ html_template = """
                 .then(data => {
                     document.getElementById('message').innerText = data.message;
                     if (data.success) {
-                        location.reload();  // Refresh stats
+                        setTimeout(() => location.reload(), 500);  // Refresh after animation
                     }
                 });
         }
@@ -73,8 +78,11 @@ def home():
     c.execute("SELECT level, coins, energy, lang FROM users WHERE user_id = ?", (user_id,))
     user_data = c.fetchone()
     if not user_data:
-        return "User not found", 404
-    level, coins, energy, lang = user_data
+        c.execute("INSERT INTO users (user_id, username) VALUES (?, ?)", (user_id, "Player"))
+        conn.commit()
+        level, coins, energy, lang = 1, 0, 100, "en"
+    else:
+        level, coins, energy, lang = user_data
     return render_template_string(html_template, user_id=user_id, level=level, coins=coins, energy=energy, lang=lang)
 
 @app.route('/mine', methods=['POST'])
@@ -86,25 +94,14 @@ def mine_web():
         return {"success": False, "message": "User not found"}, 404
     energy, coins, lang = user_data
     if energy < 10:
-        message = "⚡ No energy left! Wait or invite friends!" if lang == "en" else "⚡ എനർജി തീർന്നു! കാത്തിരിക്കുക അല്ലെങ്കിൽ സുഹൃത്തുക്കളെ ക്ഷണിക്കുക!"
+        message = "⚡ Energy Low! Wait or Boost!" if lang == "en" else "⚡ എനർജി കുറവാണ്! കാത്തിരിക്കുക അല്ലെങ്കിൽ ബൂസ്റ്റ് ചെയ്യുക!"
         return {"success": False, "message": message}
-    coins_earned = random.uniform(0.001, 0.005)
+    coins_earned = random.uniform(0.002, 0.008)  # Slightly higher reward
     c.execute("UPDATE users SET coins = coins + ?, energy = energy - 10 WHERE user_id = ?", (coins_earned, user_id))
     conn.commit()
-    message = f"🔨 Mined {coins_earned:.4f} coins! Tap again!" if lang == "en" else f"🔨 {coins_earned:.4f} കോയിനുകൾ മൈൻ ചെയ്തു! വീണ്ടും ടാപ്പ് ചെയ്യൂ!"
+    message = f"🔨 +{coins_earned:.4f} Coins!" if lang == "en" else f"🔨 +{coins_earned:.4f} കോയിനുകൾ!"
     logger.info(f"User {user_id} mined {coins_earned} coins via web")
     return {"success": True, "message": message}
-
-# Keep-alive server for Replit
-class KeepAlive(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is alive")
-
-def run_server():
-    server = HTTPServer(("", 8080), KeepAlive)
-    server.serve_forever()
 
 # Bot commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -112,47 +109,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or "Player"
     c.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
-    keyboard = [[InlineKeyboardButton("🎮 Play Now", web_app=WebAppInfo(url=f"https://telebot-miner.psychoprince.repl.co?user_id={user_id}"))]]
+    c.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,))
+    lang = c.fetchone()[0]
+    keyboard = [
+        [InlineKeyboardButton("🎮 Mine Crypto", web_app=WebAppInfo(url=f"https://telebot-miner.psychoprince.repl.co?user_id={user_id}"))],
+        [InlineKeyboardButton("🏆 Top Players", callback_data="top"), InlineKeyboardButton("⚡ Boost", callback_data="boost")],
+        [InlineKeyboardButton("🌐 Lang: EN/ML", callback_data="lang")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Welcome to Crypto King! Tap to mine FREE crypto!", reply_markup=reply_markup)
+    welcome_text = "👑 Welcome to Crypto King! Tap to mine FREE crypto!" if lang == "en" else "👑 ക്രിപ്റ്റോ രാജാവിലേക്ക് സ്വാഗതം! ഫ്രീ ക്രിപ്റ്റോ മൈൻ ചെയ്യൂ!"
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
     logger.info(f"User {user_id} started the bot")
 
-async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
     c.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,))
-    result = c.fetchone()
-    lang = result[0] if result else "en"
-    help_text = (
-        "en" if lang == "en" else "ml",
-        "🎮 **How to Play Crypto King** 🎮\n"
-        "1. Search '@YourBotName' in Telegram.\n"
-        "2. Type /start and tap 'Play Now'.\n"
-        "3. Tap the coin to earn FREE crypto!\n"
-        "4. Energy refills every 10 mins.\n"
-        "5. Use /lang ml for Malayalam.\n"
-        "💰 Tap more, win BIG like Hamster Kombat! 💰" if lang == "en" else
-        "🎮 **ക്രിപ്റ്റോ കിംഗ് എങ്ങനെ കളിക്കാം** 🎮\n"
-        "1. ടെലിഗ്രാമിൽ '@YourBotName' തിരയുക.\n"
-        "2. /start ടൈപ്പ് ചെയ്ത് 'ഇപ്പോൾ കളിക്കുക' ടാപ്പ് ചെയ്യുക.\n"
-        "3. കോയിനിൽ ടാപ്പ് ചെയ്ത് ഫ്രീ ക്രിപ്റ്റോ നേടുക!\n"
-        "4. എനർജി ഓരോ 10 മിനിറ്റിലും നിറയും.\n"
-        "5. /lang ml ഉപയോഗിച്ച് മലയാളം തിരഞ്ഞെടുക്കുക.\n"
-        "💰 കൂടുതൽ ടാപ്പ്, ഹാംസ്റ്റർ കോമ്പാറ്റിനെപ്പോലെ വലിയ സമ്മാനങ്ങൾ! 💰"
-    )[1]
-    await update.message.reply_text(help_text)
-    logger.info(f"User {user_id} requested help")
+    lang = c.fetchone()[0] if c.fetchone() else "en"
 
-async def lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    args = context.args
-    lang = args[0] if args else "en"
-    if lang not in ["en", "ml"]:
-        await update.message.reply_text("Use /lang en or /lang ml")
-        return
-    c.execute("UPDATE users SET lang = ? WHERE user_id = ?", (lang, user_id))
-    conn.commit()
-    await update.message.reply_text("Language set to English!" if lang == "en" else "ഭാഷ മലയാളമായി സജ്ജമാക്കി!")
-    logger.info(f"User {user_id} set language to {lang}")
+    if query.data == "top":
+        c.execute("SELECT username, coins FROM users ORDER BY coins DESC LIMIT 5")
+        top_players = c.fetchall()
+        top_text = "🏆 Top Miners\n" if lang == "en" else "🏆 മികച്ച മൈനർമാർ\n"
+        for i, (username, coins) in enumerate(top_players, 1):
+            top_text += f"{i}. @{username} - {coins:.4f} Coins\n"
+        await query.edit_message_text(top_text)
+
+    elif query.data == "boost":
+        await query.edit_message_text("⚡ Boost coming soon! Invite friends to get more energy!" if lang == "en" else "⚡ ബൂസ്റ്റ് ഉടൻ വരുന്നു! കൂടുതൽ എനർജിക്കായി സുഹൃത്തുക്കളെ ക്ഷണിക്കുക!")
+
+    elif query.data == "lang":
+        c.execute("UPDATE users SET lang = ? WHERE user_id = ?", ("ml" if lang == "en" else "en", user_id))
+        conn.commit()
+        new_lang = "ml" if lang == "en" else "en"
+        keyboard = [
+            [InlineKeyboardButton("🎮 Mine Crypto", web_app=WebAppInfo(url=f"https://replit.com/@princephilip514/crypto?user_id={user_id}"))],
+            [InlineKeyboardButton("🏆 Top Players", callback_data="top"), InlineKeyboardButton("⚡ Boost", callback_data="boost")],
+            [InlineKeyboardButton("🌐 Lang: EN/ML", callback_data="lang")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Language switched!" if new_lang == "en" else "ഭാഷ മാറ്റി!", reply_markup=reply_markup)
+    logger.info(f"User {user_id} pressed {query.data}")
 
 # Main function
 def main():
@@ -162,27 +159,17 @@ def main():
         raise ValueError("Set TELEGRAM_TOKEN in .env or Replit Secrets")
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help))
-    application.add_handler(CommandHandler("lang", lang))
+    application.add_handler(CallbackQueryHandler(button_handler))
     logger.info("Starting bot polling...")
 
     # Start Flask and keep-alive in threads
-    threading.Thread(target=run_server, daemon=True).start()
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000), daemon=True).start()
 
     # Background energy refill
     def refill_energy():
         while True:
-            try:
-                # Create a new connection for this thread
-                thread_conn = sqlite3.connect("users.db")
-                thread_c = thread_conn.cursor()
-                # Use MIN instead of LEAST for SQLite compatibility
-                thread_c.execute("UPDATE users SET energy = MIN(energy + 10, 100) WHERE energy < 100")
-                thread_conn.commit()
-                thread_conn.close()
-            except Exception as e:
-                logger.error(f"Error in refill_energy: {e}")
+            c.execute("UPDATE users SET energy = LEAST(energy + 10, 100) WHERE energy < 100")
+            conn.commit()
             time.sleep(600)  # Refill 10 energy every 10 mins
     threading.Thread(target=refill_energy, daemon=True).start()
 
