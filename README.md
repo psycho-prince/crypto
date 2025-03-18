@@ -13,11 +13,6 @@ A simple Telegram bot that simulates cryptocurrency mining, built with Python an
 - **Database**: SQLite (`users.db`) stores user data.
 - **Hosting**: Runs on Replit with a keep-alive HTTP server.
 
-## Setup on Replit
-1. **Create a Repl**:
-   - Go to [replit.com](https://replit.com), sign up with GitHub (`psycho-prince`).
-   - New Repl > Python > Name: `telebot-miner`.
-
 2. **Add Files**:
    - `telegram_bot.py`: Main bot code.
    - `requirements.txt`: Dependencies.
