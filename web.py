@@ -4,24 +4,20 @@ import logging
 from flask import Flask, request, render_template_string, jsonify
 import random
 from dotenv import load_dotenv
+import threading
+import time
 
-# Load .env file
 load_dotenv()
-
-# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Database setup
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
 c.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, coins REAL DEFAULT 0, energy INTEGER DEFAULT 100, level INTEGER DEFAULT 1, lang TEXT DEFAULT 'en')")
 conn.commit()
 
-# Flask app
 app = Flask(__name__)
 
-# HTML template with puzzle game
 html_template = """
 <!DOCTYPE html>
 <html>
@@ -104,13 +100,12 @@ html_template = """
                 });
         }
         function exit() { window.Telegram.WebApp.close(); }
-        newPuzzle();  // Start with a puzzle
+        newPuzzle();
     </script>
 </body>
 </html>
 """
 
-# Flask routes
 @app.route('/')
 def home():
     user_id = request.args.get('user_id')
@@ -136,7 +131,7 @@ def new_puzzle():
     user_id = request.args.get('user_id')
     if not user_id:
         return jsonify({"error": "User ID required"}), 400
-    values = [1, 1, 2, 2, 3, 3] + [0] * 3  # 3 pairs + 3 blanks
+    values = [1, 1, 2, 2, 3, 3] + [0] * 3
     random.shuffle(values)
     tiles = [{"value": v, "hidden": True, "matched": False} for v in values]
     return jsonify({"tiles": tiles})
@@ -163,7 +158,7 @@ def mine_web():
                     if i != j and not other["hidden"] and other["value"] == t["value"]:
                         tiles[i]["matched"] = tiles[j]["matched"] = True
         matched = sum(1 for t in tiles if t["matched"])
-        if matched >= 6:  # All pairs matched
+        if matched >= 6:
             coins_earned = random.uniform(0.01, 0.05)
             c.execute("UPDATE users SET coins = coins + ?, energy = energy - 10, level = level + 1 WHERE user_id = ?", (coins_earned, user_id))
             conn.commit()
@@ -177,7 +172,6 @@ def mine_web():
             return jsonify({"success": True, "message": message, "tiles": tiles, "matched": matched, "complete": False})
     return jsonify({"success": False, "message": "Invalid tile"}), 400
 
-# Energy refill loop
 def refill_energy():
     while True:
         thread_conn = sqlite3.connect("users.db", check_same_thread=False)
