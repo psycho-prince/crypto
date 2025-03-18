@@ -76,7 +76,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     # Get the Repl URL from environment
     repl_domain = os.environ.get('REPL_SLUG', '')
-    web_app_url = f"https://ab9584a2-cb66-4561-bbfd-fef31aa57a96-00-3tl90pt0sysqo.sisko.replit.dev:5000/={user_id}"
+    web_app_url = f"https://{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co/?user_id={user_id}"
     keyboard = [[InlineKeyboardButton("🎮 Start Mining", web_app=WebAppInfo(url=web_app_url))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("👑 Crypto King: Solve Puzzles, Mine Coins!", reply_markup=reply_markup)
