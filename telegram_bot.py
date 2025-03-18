@@ -172,8 +172,16 @@ def main():
     # Background energy refill
     def refill_energy():
         while True:
-            c.execute("UPDATE users SET energy = LEAST(energy + 10, 100) WHERE energy < 100")
-            conn.commit()
+            try:
+                # Create a new connection for this thread
+                thread_conn = sqlite3.connect("users.db")
+                thread_c = thread_conn.cursor()
+                # Use MIN instead of LEAST for SQLite compatibility
+                thread_c.execute("UPDATE users SET energy = MIN(energy + 10, 100) WHERE energy < 100")
+                thread_conn.commit()
+                thread_conn.close()
+            except Exception as e:
+                logger.error(f"Error in refill_energy: {e}")
             time.sleep(600)  # Refill 10 energy every 10 mins
     threading.Thread(target=refill_energy, daemon=True).start()
 
