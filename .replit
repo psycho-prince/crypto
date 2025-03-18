@@ -1,29 +1,8 @@
-modules = ["python-3.12", "nodejs-20", "bash", "web"]
-run = "python3 telegram_bot.py"
+run = "bash run.sh"
 
 [nix]
 channel = "stable-24_05"
 
-[deployment]
-run = ["sh", "-c", "python3 bot.py"]
-
 [[ports]]
 localPort = 5000
 externalPort = 5000
-
-[[ports]]
-localPort = 8080
-externalPort = 80
-run = "bash run.sh"
-
-[workflows]
-runButton = "Run Bot"
-
-[[workflows.workflow]]
-name = "Run Bot"
-author = 40617991
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python3 bot.py"
