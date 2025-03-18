@@ -105,7 +105,7 @@ def main():
             thread_conn = sqlite3.connect("users.db", check_same_thread=False)
             thread_c = thread_conn.cursor()
             try:
-                thread_c.execute("UPDATE users SET energy = LEAST(energy + 10, 100) WHERE energy < 100")
+                thread_c.execute("UPDATE users SET energy = MIN(energy + 10, 100) WHERE energy < 100")
                 thread_conn.commit()
                 logger.info("Energy refilled for users")
             except Exception as e:
