@@ -156,7 +156,7 @@ def main():
                 # Create a new connection for this thread
                 thread_conn = sqlite3.connect("users.db")
                 thread_c = thread_conn.cursor()
-                thread_c.execute("UPDATE users SET energy = LEAST(energy + 10, 100) WHERE energy < 100")
+                thread_c.execute("UPDATE users SET energy = MAX(energy + 10, 100) WHERE energy < 100")
                 thread_conn.commit()
                 thread_conn.close()
             except Exception as e:
