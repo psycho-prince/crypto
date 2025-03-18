@@ -76,8 +76,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
     # Get the Repl URL from environment
-    repl_domain = os.environ.get('REPL_SLUG', '')
-    web_app_url = f"https://{repl_domain}.repl.co?user_id={user_id}"
+    repl_id = os.environ.get('REPL_ID', '')
+    repl_owner = os.environ.get('REPL_OWNER', '')
+    repl_slug = os.environ.get('REPL_SLUG', '')
+    web_app_url = f"https://{repl_slug}.{repl_owner}.repl.co?user_id={user_id}"
     keyboard = [[InlineKeyboardButton("🎮 Start Mining", web_app=WebAppInfo(url=web_app_url))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("👑 Crypto King: Solve Puzzles, Mine Coins!", reply_markup=reply_markup)
