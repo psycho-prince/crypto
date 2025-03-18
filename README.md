@@ -1,23 +1,33 @@
 # Telegram Crypto Mining Bot
 
-A simple Telegram bot that simulates cryptocurrency mining, built with Python and deployed on Replit. Users can register a wallet, start/stop mining, check status, and view simulated profits.
+A Telegram bot for simulated cryptocurrency mining, built with Python and hosted on Replit. Edit directly on GitHub and deploy on Replit for free.
 
 ## Features
 - **Commands**:
   - `/start`: Welcome message.
-  - `/register <crypto> <wallet>`: Register a cryptocurrency and wallet.
+  - `/register <crypto> <wallet>`: Register a crypto wallet.
   - `/mine`: Start simulated mining.
-  - `/status`: Check mining status and wallet.
+  - `/status`: Check mining status.
   - `/stop`: Stop mining.
-  - `/profit`: View simulated profit (e.g., 0.0001 XMR).
-- **Database**: SQLite (`users.db`) stores user data.
-- **Hosting**: Runs on Replit with a keep-alive HTTP server.
+  - `/profit`: View simulated profit (0.0001 XMR).
+- **Database**: SQLite (`users.db`).
+- **Hosting**: Replit with keep-alive server.
 
-2. **Add Files**:
-   - `telegram_bot.py`: Main bot code.
-   - `requirements.txt`: Dependencies.
-   - `.replit`: Run config.
-   - `README.md`: This file.
+## Setup on GitHub
+1. **Edit Files**:
+   - Update files directly on `https://github.com/psycho-prince/crypto` (branch: `main`).
+   - Replace with the above files if needed.
+
+2. **Commit**:
+   - Use GitHub’s web editor to commit changes.
+
+## Deploy on Replit
+1. **Sign Up**:
+   - [replit.com](https://replit.com) > Sign in with GitHub (`psycho-prince`).
+
+2. **Import Repo**:
+   - New Repl > Python > Name: `telebot-miner`.
+   - Sidebar > "Version Control" > "Import from GitHub" > `psycho-prince/crypto` > Branch: `main`.
 
 3. **Install Dependencies**:
    ```bash
