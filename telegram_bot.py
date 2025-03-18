@@ -94,7 +94,7 @@ async def profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Main function
 def main():
-    token = os.getenv("7995392986:AAGYT8QpFz160rWs5J0IHfozylMzgrGHBlE")
+    token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         logger.error("TELEGRAM_TOKEN not set!")
         raise ValueError("Set TELEGRAM_TOKEN in .env or Replit Secrets")
