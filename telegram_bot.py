@@ -125,7 +125,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     c.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,))
-    lang = c.fetchone()[0] if c.fetchone() else "en"
+    result = c.fetchone()
+    lang = result[0] if result else "en"
 
     if query.data == "top":
         c.execute("SELECT username, coins FROM users ORDER BY coins DESC LIMIT 5")
