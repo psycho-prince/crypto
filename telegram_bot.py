@@ -120,7 +120,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     c.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,))
-    lang = c.fetchone()[0] if c.fetchone() else "en"
+    result = c.fetchone()
+    lang = result[0] if result else "en"
     help_text = (
         "en" if lang == "en" else "ml",
         "🎮 **How to Play Crypto King** 🎮\n"
