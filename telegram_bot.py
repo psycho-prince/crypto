@@ -5,9 +5,11 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+import time
 from dotenv import load_dotenv
+import requests  # For potential real mining pool integration
 
-# Load .env file (for local use; Replit uses Secrets)
+# Load .env file (local use; Replit uses Secrets)
 load_dotenv()
 
 # Logging setup
@@ -31,10 +33,31 @@ def run_server():
     server = HTTPServer(("", 8080), KeepAlive)
     server.serve_forever()
 
+# Simulated mining function (placeholder for real mining)
+def simulate_mining(crypto, duration=10):
+    logger.info(f"Simulating mining {crypto} for {duration} seconds")
+    time.sleep(duration)
+    return 0.0001  # Simulated profit in XMR (or chosen coin)
+
 # Bot commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Welcome! Use /register <crypto> <wallet> to set up mining.")
+    await update.message.reply_text("Welcome! Use /help for instructions.")
     logger.info(f"User {update.effective_user.id} started the bot")
+
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "How to use this bot in Telegram:\n"
+        "1. **Find the Bot**: Search for '@YourBotName' in Telegram (set by BotFather).\n"
+        "2. **Start**: Type /start to begin.\n"
+        "3. **Register**: Use /register <crypto> <wallet> (e.g., /register monero 4AYourWallet).\n"
+        "4. **Mine**: Type /mine to start simulated mining (real mining coming soon).\n"
+        "5. **Status**: Check /status for your mining state.\n"
+        "6. **Stop**: Use /stop to halt mining.\n"
+        "7. **Profit**: See /profit for simulated earnings.\n"
+        "Note: Mining is simulated due to Replit limits. Real mining integration planned!"
+    )
+    await update.message.reply_text(help_text)
+    logger.info(f"User {update.effective_user.id} requested help")
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -59,6 +82,9 @@ async def mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wallet, crypto, pool = user_data
     context.user_data["mining"] = True
     await update.message.reply_text(f"Started mining {crypto} to {wallet} on {pool} (simulated).")
+    # Simulate mining in background
+    profit = simulate_mining(crypto)
+    context.user_data["profit"] = context.user_data.get("profit", 0) + profit
     logger.info(f"User {user_id} started mining {crypto}")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,11 +112,12 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     mining = context.user_data.get("mining", False)
+    profit = context.user_data.get("profit", 0)
     if mining:
-        await update.message.reply_text("Profit: 0.0001 XMR (simulated)")
+        await update.message.reply_text(f"Profit: {profit:.6f} XMR (simulated)")
     else:
-        await update.message.reply_text("Not mining, no profit!")
-    logger.info(f"User {user_id} checked profit")
+        await update.message.reply_text(f"Not mining! Total profit: {profit:.6f} XMR (simulated)")
+    logger.info(f"User {user_id} checked profit: {profit}")
 
 # Main function
 def main():
@@ -100,6 +127,7 @@ def main():
         raise ValueError("Set TELEGRAM_TOKEN in .env or Replit Secrets")
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help))
     application.add_handler(CommandHandler("register", register))
     application.add_handler(CommandHandler("mine", mine))
     application.add_handler(CommandHandler("status", status))
