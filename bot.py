@@ -114,7 +114,10 @@ def main():
             time.sleep(600)  # Refill 10 energy every 10 mins
     threading.Thread(target=refill_energy, daemon=True).start()
 
-    application.run_polling()
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except KeyboardInterrupt:
+        application.stop()
 
 if __name__ == "__main__":
     main()
