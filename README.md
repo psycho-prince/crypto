@@ -20,15 +20,3 @@ A Telegram bot for simulated cryptocurrency mining, built with Python and hosted
 
 2. **Commit**:
    - Use GitHub’s web editor to commit changes.
-
-## Deploy on Replit
-1. **Sign Up**:
-   - [replit.com](https://replit.com) > Sign in with GitHub (`psycho-prince`).
-
-2. **Import Repo**:
-   - New Repl > Python > Name: `telebot-miner`.
-   - Sidebar > "Version Control" > "Import from GitHub" > `psycho-prince/crypto` > Branch: `main`.
-
-3. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
