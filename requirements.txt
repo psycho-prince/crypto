@@ -1,7 +1,4 @@
 python-telegram-bot==20.8
 python-dotenv
 requests
-telegram
 flask
-python
-python-telegram-bot
