@@ -1,6 +1,7 @@
 import sqlite3
 import logging
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
+from datetime import datetime, timedelta
 
 app = Flask(__name__, template_folder='templates')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,8 +14,29 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS users (
             user_id TEXT PRIMARY KEY,
             coins INTEGER,
-            energy INTEGER
+            energy INTEGER,
+            last_refill TIMESTAMP
         )''')
+        conn.commit()
+
+# Refill energy based on time
+def refill_energy(user_id):
+    with sqlite3.connect('users.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT energy, last_refill FROM users WHERE user_id = ?", (user_id,))
+        result = c.fetchone()
+        if result:
+            energy, last_refill = result
+            if last_refill:
+                last_time = datetime.fromisoformat(last_refill)
+                now = datetime.now()
+                elapsed_minutes = (now - last_time).total_seconds() // 60
+                new_energy = min(100, energy + int(elapsed_minutes * 2))  # 2 energy per minute
+                c.execute("UPDATE users SET energy = ?, last_refill = ? WHERE user_id = ?",
+                          (new_energy, now.isoformat(), user_id))
+            else:
+                c.execute("UPDATE users SET energy = 100, last_refill = ? WHERE user_id = ?",
+                          (datetime.now().isoformat(), user_id))
         conn.commit()
 
 @app.route('/')
@@ -29,19 +51,43 @@ def index():
         c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
         user = c.fetchone()
         if not user:
-            c.execute("INSERT INTO users (user_id, coins, energy) VALUES (?, 0, 100)", (user_id,))
+            c.execute("INSERT INTO users (user_id, coins, energy, last_refill) VALUES (?, 0, 100, ?)",
+                      (user_id, datetime.now().isoformat()))
+            conn.commit()
             coins, energy = 0, 100
         else:
             coins, energy = user
-        # Refill energy (fixed LEAST issue)
-        c.execute("UPDATE users SET energy = CASE WHEN energy + 10 > 100 THEN 100 ELSE energy + 10 END WHERE user_id = ?", (user_id,))
-        c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
-        coins, energy = c.fetchone()
-        conn.commit()
+            refill_energy(user_id)
+            c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
+            coins, energy = c.fetchone()
     
     return render_template('index.html', coins=coins, energy=energy, user_id=user_id)
 
+@app.route('/mine', methods=['POST'])
+def mine():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({"error": "No user_id provided"}), 400
+    
+    with sqlite3.connect('users.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
+        user = c.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        coins, energy = user
+        if energy < 1:
+            return jsonify({"error": "Not enough energy"}), 400
+        
+        # Mine: +1 coin, -1 energy
+        c.execute("UPDATE users SET coins = coins + 1, energy = energy - 1 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
+        coins, energy = c.fetchone()
+    
+    return jsonify({"coins": coins, "energy": energy})
+
 if __name__ == '__main__':
-    init_db()  # Create DB on startup
+    init_db()
     logger.info("Starting Flask on 0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)
