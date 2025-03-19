@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request, render_template, jsonify
 from datetime import datetime
 
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, template_folder='templates', static_folder=None)  # Disable static folder
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,10 @@ def mine():
         coins, energy = c.fetchone()
     
     return jsonify({"coins": coins, "energy": energy})
+
+@app.route('/debug')
+def debug():
+    return "Crypto King Mining Game v1.0 - Flask is running!"
 
 if __name__ == '__main__':
     init_db()
