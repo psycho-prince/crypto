@@ -3,11 +3,10 @@ import logging
 from flask import Flask, request, render_template, jsonify
 from datetime import datetime
 
-app = Flask(__name__, template_folder='templates', static_folder=None)  # Disable static folder
+app = Flask(__name__, template_folder='templates', static_folder=None)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Initialize database
 def init_db():
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -19,7 +18,6 @@ def init_db():
         )''')
         conn.commit()
 
-# Refill energy over time
 def refill_energy(user_id):
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -31,7 +29,7 @@ def refill_energy(user_id):
                 last_time = datetime.fromisoformat(last_refill)
                 now = datetime.now()
                 elapsed_minutes = (now - last_time).total_seconds() // 60
-                new_energy = min(100, energy + int(elapsed_minutes * 2))  # 2 energy/min
+                new_energy = min(100, energy + int(elapsed_minutes * 2))
                 c.execute("UPDATE users SET energy = ?, last_refill = ? WHERE user_id = ?",
                           (new_energy, now.isoformat(), user_id))
             else:
@@ -39,7 +37,7 @@ def refill_energy(user_id):
                           (datetime.now().isoformat(), user_id))
         conn.commit()
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
     user_id = request.args.get('user_id')
     if not user_id:
@@ -86,11 +84,11 @@ def mine():
     
     return jsonify({"coins": coins, "energy": energy})
 
-@app.route('/debug')
+@app.route('/debug', methods=['GET'])
 def debug():
     return "Crypto King Mining Game v1.0 - Flask is running!"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     init_db()
     logger.info("Starting Flask on 0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)
