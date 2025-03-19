@@ -18,5 +18,5 @@ if [ ! -f "webapp.py" ]; then
     exit 1
 fi
 
-"$PYTHON_CMD" bot.py &
-"$PYTHON_CMD" webapp.py
+"$PYTHON_CMD" bot.py &  # Runs bot in background
+"$PYTHON_CMD" webapp.py  # Runs Flask in foreground
