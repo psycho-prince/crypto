@@ -2,22 +2,126 @@
 <html>
 <head>
     <title>Crypto King</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
-        h1 { color: #FFD700; }
-        p { font-size: 18px; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #FFD700; border: none; border-radius: 5px; }
-        button:hover { background: #FFC107; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        #stats { margin: 20px 0; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin: 10px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        #user-info {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+        #stats {
+            margin: 15px 0;
+            text-align: center;
+        }
+        #stats p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        #energy-bar {
+            width: 200px;
+            height: 10px;
+            background: #444;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 5px auto;
+        }
+        #energy-fill {
+            height: 100%;
+            background: #00ff00;
+            transition: width 0.3s ease;
+        }
+        #coin-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 20px 0;
+            cursor: pointer;
+        }
+        #coin {
+            width: 100%;
+            height: 100%;
+            background: url('https://img.icons8.com/emoji/96/crown-emoji.png') no-repeat center;
+            background-size: contain;
+            transition: transform 0.2s ease;
+        }
+        #coin.tapped {
+            transform: scale(1.2) rotate(10deg);
+        }
+        #tap-effect {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            color: #FFD700;
+            opacity: 0;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        #tap-effect.show {
+            opacity: 1;
+            transform: translate(-50%, -70%);
+        }
+        #mine-btn {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            color: #fff;
+            background: #FFD700;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.1s ease;
+        }
+        #mine-btn:hover {
+            background: #FFC107;
+        }
+        #mine-btn:active {
+            transform: scale(0.95);
+        }
+        #mine-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        footer {
+            position: absolute;
+            bottom: 10px;
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
     <h1>👑 Crypto King</h1>
-    <p>User: {{ user_id }}</p>
+    <div id="user-info">User: {{ user_id }}</div>
     <div id="stats">
         <p>Coins: <span id="coins">{{ coins }}</span></p>
         <p>Energy: <span id="energy">{{ energy }}</span></p>
+        <div id="energy-bar">
+            <div id="energy-fill" style="width: {{ energy }}%;"></div>
+        </div>
+    </div>
+    <div id="coin-container" onclick="mineCoins()">
+        <div id="coin"></div>
+        <div id="tap-effect">+1</div>
     </div>
     <button id="mine-btn" onclick="mineCoins()">Tap to Mine</button>
     <footer>©️2025 Crypto King by Gagan Saini</footer>
@@ -26,19 +130,32 @@
         async function mineCoins() {
             const userId = "{{ user_id }}";
             const btn = document.getElementById('mine-btn');
+            const coin = document.getElementById('coin');
+            const tapEffect = document.getElementById('tap-effect');
             btn.disabled = true;
-            
+
+            // Trigger tap animation
+            coin.classList.add('tapped');
+            tapEffect.classList.add('show');
+
             const response = await fetch(`/mine?user_id=${userId}`, { method: 'POST' });
             const data = await response.json();
-            
+
             if (response.ok) {
                 document.getElementById('coins').textContent = data.coins;
                 document.getElementById('energy').textContent = data.energy;
+                document.getElementById('energy-fill').style.width = `${data.energy}%`;
                 if (data.energy > 0) btn.disabled = false;
             } else {
                 alert(data.error || 'Mining failed!');
                 btn.disabled = false;
             }
+        }
+
+        // Telegram Mini App integration
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.expand(); // Make the app full-screen
+            window.Telegram.WebApp.enableClosingConfirmation(); // Show confirmation on close
         }
     </script>
 </body>
