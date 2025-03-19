@@ -6,16 +6,40 @@
         body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
         h1 { color: #FFD700; }
         p { font-size: 18px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #FFD700; border: none; border-radius: 5px; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #FFD700; border: none; border-radius: 5px; }
         button:hover { background: #FFC107; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #stats { margin: 20px 0; }
     </style>
 </head>
 <body>
     <h1>👑 Crypto King</h1>
     <p>User: {{ user_id }}</p>
-    <p>Coins: {{ coins }}</p>
-    <p>Energy: {{ energy }}</p>
-    <button onclick="alert('Mining not fully implemented yet! Energy refilled.')">Mine Coins</button>
+    <div id="stats">
+        <p>Coins: <span id="coins">{{ coins }}</span></p>
+        <p>Energy: <span id="energy">{{ energy }}</span></p>
+    </div>
+    <button id="mine-btn" onclick="mineCoins()">Tap to Mine</button>
     <footer>©️2025 Crypto King by Gagan Saini</footer>
+
+    <script>
+        async function mineCoins() {
+            const userId = "{{ user_id }}";
+            const btn = document.getElementById('mine-btn');
+            btn.disabled = true;
+            
+            const response = await fetch(`/mine?user_id=${userId}`, { method: 'POST' });
+            const data = await response.json();
+            
+            if (response.ok) {
+                document.getElementById('coins').textContent = data.coins;
+                document.getElementById('energy').textContent = data.energy;
+                if (data.energy > 0) btn.disabled = false;
+            } else {
+                alert(data.error || 'Mining failed!');
+                btn.disabled = false;
+            }
+        }
+    </script>
 </body>
 </html>
