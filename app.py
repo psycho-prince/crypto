@@ -1,12 +1,25 @@
+import os
 import sqlite3
 import logging
-from flask import Flask, request, render_template, jsonify
 from datetime import datetime
+from flask import Flask, request, render_template, jsonify
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes
+from dotenv import load_dotenv
+import threading
 
-app = Flask(__name__, template_folder='templates', static_folder=None)
+# Load environment variables
+load_dotenv()
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app
+app = Flask(__name__, template_folder='templates', static_folder=None)
+
+# Database initialization
 def init_db():
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -18,6 +31,7 @@ def init_db():
         )''')
         conn.commit()
 
+# Refill energy based on elapsed time
 def refill_energy(user_id):
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -37,6 +51,7 @@ def refill_energy(user_id):
                           (datetime.now().isoformat(), user_id))
         conn.commit()
 
+# Flask Routes
 @app.route('/', methods=['GET'])
 def index():
     user_id = request.args.get('user_id')
@@ -88,7 +103,37 @@ def mine():
 def debug():
     return "Crypto King Mining Game v1.0 - Flask is running!"
 
-if __name__ == "__main__":
+# Telegram Bot Handlers
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = str(user.id)
+    username = user.username or "Unknown"
+    
+    keyboard = [[InlineKeyboardButton("Play Crypto King", url=f"https://crypto-king-v2.onrender.com/?user_id={user_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"Welcome, {username}! 👑\nTap below to start mining in Crypto King!",
+        reply_markup=reply_markup
+    )
+    logger.info(f"User {user_id} ({username}) started bot, Web App URL: https://crypto-king-v2.onrender.com/?user_id={user_id}")
+
+# Function to run Flask app
+def run_flask():
     init_db()
     logger.info("Starting Flask on 0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+
+# Function to run Telegram bot
+def run_bot():
+    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    logger.info("Starting bot polling...")
+    bot_app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    # Run Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+    # Run Telegram bot in the main thread
+    run_bot()
