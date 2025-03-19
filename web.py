@@ -166,7 +166,7 @@ def mine_web():
             logger.info(f"User {user_id} solved puzzle, earned {coins_earned} coins")
             return jsonify({"success": True, "message": message, "tiles": tiles, "matched": matched, "complete": True})
         else:
-            c.execute("UPDATE users SET energy = energy - 10 WHERE user_id = ?", (user_id,))
+            c.execute("UPDATE users SET energy = MIN(100, energy + 10) WHERE user_id = ?", (user_id,))
             conn.commit()
             message = "🔍 Tile Revealed! Keep going!"
             return jsonify({"success": True, "message": message, "tiles": tiles, "matched": matched, "complete": False})
