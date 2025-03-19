@@ -55,9 +55,12 @@ def refill_energy(user_id):
 @app.route('/', methods=['GET'])
 def index():
     user_id = request.args.get('user_id')
+    logger.info(f"Accessing / with user_id: {user_id}")
+    
     if not user_id:
-        logger.error("No user_id provided")
-        return "Error: No user_id provided", 400
+        # For debugging, render the UI with a placeholder user_id
+        user_id = "test_user"
+        logger.warning("No user_id provided, using test_user for debugging")
     
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -74,7 +77,9 @@ def index():
             c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
             coins, energy = c.fetchone()
     
-    return render_template('index.html', coins=coins, energy=energy, user_id=user_id)
+    response = render_template('index.html', coins=coins, energy=energy, user_id=user_id)
+    # Add headers to ensure Telegram recognizes this as a Mini App
+    return response, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/mine', methods=['POST'])
 def mine():
@@ -102,6 +107,10 @@ def mine():
 @app.route('/debug', methods=['GET'])
 def debug():
     return "Crypto King Mining Game v1.0 - Flask is running!"
+
+@app.route('/test', methods=['GET'])
+def test():
+    return "Flask is working! This is a test route."
 
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
