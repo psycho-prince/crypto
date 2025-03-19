@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or "Player"
     c.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
-    repl_domain = "https://workspace.princephilip514.repl.co"  # Replace with your actual Repl URL
+    repl_domain = "https://crypto-king.onrender.com"  # Replace with your actual Repl URL
     web_app_url = f"{repl_domain}?user_id={user_id}"
     keyboard = [[InlineKeyboardButton("🎮 Start Mining", web_app=WebAppInfo(url=web_app_url))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
