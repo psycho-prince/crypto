@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.username or f"User{user_id}"
-    repl_domain = "https://crypto-king.onrender.com"  # Updated to Render URL
+    repl_domain = "https://crypto-king.onrender.com"
     web_app_url = f"{repl_domain}/?user_id={user_id}"
     keyboard = [[InlineKeyboardButton("🎮 Play Crypto King", web_app=WebAppInfo(url=web_app_url))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
