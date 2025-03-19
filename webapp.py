@@ -30,25 +30,16 @@ def index():
         user = c.fetchone()
         if not user:
             c.execute("INSERT INTO users (user_id, coins, energy) VALUES (?, 0, 100)", (user_id,))
-            conn.commit()
             coins, energy = 0, 100
         else:
             coins, energy = user
         # Refill energy (fixed LEAST issue)
-        refill_energy(c, user_id)
+        c.execute("UPDATE users SET energy = CASE WHEN energy + 10 > 100 THEN 100 ELSE energy + 10 END WHERE user_id = ?", (user_id,))
+        c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
+        coins, energy = c.fetchone()
         conn.commit()
     
     return render_template('index.html', coins=coins, energy=energy, user_id=user_id)
-
-def refill_energy(cursor, user_id):
-    try:
-        # Replace LEAST with MIN or manual logic
-        cursor.execute("UPDATE users SET energy = MIN(100, energy + 10) WHERE user_id = ?", (user_id,))
-        # Alternative manual logic:
-        # cursor.execute("UPDATE users SET energy = energy + 10 WHERE user_id = ? AND energy + 10 <= 100", (user_id,))
-        # cursor.execute("UPDATE users SET energy = 100 WHERE user_id = ? AND energy > 100", (user_id,))
-    except Exception as e:
-        logger.error(f"Error in refill_energy: {str(e)}")
 
 if __name__ == '__main__':
     init_db()  # Create DB on startup
