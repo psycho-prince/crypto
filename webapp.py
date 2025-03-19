@@ -1,7 +1,7 @@
 import sqlite3
 import logging
 from flask import Flask, request, render_template, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime
 
 app = Flask(__name__, template_folder='templates')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,7 +19,7 @@ def init_db():
         )''')
         conn.commit()
 
-# Refill energy based on time
+# Refill energy over time
 def refill_energy(user_id):
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
@@ -31,7 +31,7 @@ def refill_energy(user_id):
                 last_time = datetime.fromisoformat(last_refill)
                 now = datetime.now()
                 elapsed_minutes = (now - last_time).total_seconds() // 60
-                new_energy = min(100, energy + int(elapsed_minutes * 2))  # 2 energy per minute
+                new_energy = min(100, energy + int(elapsed_minutes * 2))  # 2 energy/min
                 c.execute("UPDATE users SET energy = ?, last_refill = ? WHERE user_id = ?",
                           (new_energy, now.isoformat(), user_id))
             else:
@@ -79,7 +79,6 @@ def mine():
         if energy < 1:
             return jsonify({"error": "Not enough energy"}), 400
         
-        # Mine: +1 coin, -1 energy
         c.execute("UPDATE users SET coins = coins + 1, energy = energy - 1 WHERE user_id = ?", (user_id,))
         conn.commit()
         c.execute("SELECT coins, energy FROM users WHERE user_id = ?", (user_id,))
