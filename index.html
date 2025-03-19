@@ -3,16 +3,19 @@
 <head>
     <title>Crypto King</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
         h1 { color: #FFD700; }
         p { font-size: 18px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #FFD700; border: none; border-radius: 5px; }
+        button:hover { background: #FFC107; }
     </style>
 </head>
 <body>
-    <h1>Welcome to Crypto King, User {{ user_id }}!</h1>
+    <h1>👑 Crypto King</h1>
+    <p>User: {{ user_id }}</p>
     <p>Coins: {{ coins }}</p>
     <p>Energy: {{ energy }}</p>
-    <button onclick="alert('Mining not implemented yet!')">Mine Coins</button>
+    <button onclick="alert('Mining not fully implemented yet! Energy refilled.')">Mine Coins</button>
+    <footer>©️2025 Crypto King by Gagan Saini</footer>
 </body>
 </html>
