@@ -24,8 +24,8 @@
             color: white;
         }
         .cell.player2 {
-            background-color: #4dffa6; /* Green for Player 2 */
-            color: black;
+            background-color: #4d79ff; /* Blue for Player 2 */
+            color: white;
         }
         .cell:hover {
             background-color: #e0e0e0;
@@ -34,14 +34,41 @@
             cursor: not-allowed;
             opacity: 0.5;
         }
+        .avatar-frame {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-size: 20px;
+        }
     </style>
 </head>
-<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen">
+<body class="bg-gradient-to-r from-blue-100 to-purple-100 flex flex-col items-center justify-center min-h-screen">
     <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-        <h1 class="text-2xl font-bold text-center mb-4">Chain Reaction</h1>
-        <div id="status" class="text-center mb-4 text-lg font-semibold">
+        <h1 class="text-3xl font-bold text-center mb-4 text-blue-600">Chain Reaction</h1>
+        <div class="flex justify-between mb-4">
+            <div class="flex items-center">
+                <div class="avatar-frame mr-2">{{ username[0] | upper }}</div>
+                <div>
+                    <p class="font-semibold">{{ username }}</p>
+                    <p class="text-sm text-gray-600">Player 1</p>
+                </div>
+            </div>
+            <div class="flex items-center">
+                <div class="avatar-frame mr-2">{{ game_data.opponent_id[0] | upper if game_data and game_data.opponent_id else '?' }}</div>
+                <div>
+                    <p class="font-semibold">{{ game_data.opponent_id if game_data and game_data.opponent_id else 'Waiting...' }}</p>
+                    <p class="text-sm text-gray-600">Player 2</p>
+                </div>
+            </div>
+        </div>
+        <div id="status" class="text-center mb-4 text-lg font-semibold text-gray-800">
             {% if room_id %}
-                Waiting for game to start...
+                Waiting for another player...
             {% else %}
                 Click "Start Game" to begin!
             {% endif %}
@@ -50,9 +77,8 @@
             <!-- Board will be populated dynamically -->
         </div>
         <div id="player-info" class="text-center mb-4">
-            <p>User ID: <span id="user-id">{{ user_id }}</span></p>
-            <p>Username: <span id="username">{{ username }}</span></p>
-            <p>Room ID: <span id="room-id">{{ room_id if room_id else 'Not yet created' }}</span></p>
+            <p class="text-sm text-gray-600">User ID: <span id="user-id">{{ user_id }}</span></p>
+            <p class="text-sm text-gray-600">Room ID: <span id="room-id">{{ room_id if room_id else 'Not yet created' }}</span></p>
         </div>
         <button id="start-game-button" class="bg-green-500 text-white px-4 py-2 rounded w-full hover:bg-green-600 {% if room_id %}hidden{% endif %}">
             Start Game
@@ -60,6 +86,12 @@
         <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 {% if not room_id %}hidden{% endif %}">
             Share Game Link
         </button>
+        <div class="mt-4">
+            <h2 class="text-xl font-semibold text-center mb-2">Leaderboard</h2>
+            <div id="leaderboard" class="text-sm text-gray-600">
+                <!-- Leaderboard will be populated dynamically -->
+            </div>
+        </div>
     </div>
 
     <script>
@@ -68,6 +100,16 @@
         let username = '{{ username }}';
         let roomId = '{{ room_id }}';
         let gameData = {{ game_data | tojson | safe }};
+
+        // Fetch and display leaderboard
+        async function fetchLeaderboard() {
+            const response = await fetch('/leaderboard');
+            const leaders = await response.json();
+            const leaderboardDiv = document.getElementById('leaderboard');
+            leaderboardDiv.innerHTML = leaders.map((leader, index) => `
+                <p>${index + 1}. ${leader.username}: ${leader.wins} wins</p>
+            `).join('');
+        }
 
         // Initialize the board
         function initBoard() {
@@ -123,6 +165,7 @@
                 socket.emit('game_update', { room_id: roomId, game_data: gameData });
                 updateBoard();
                 updateStatus();
+                fetchLeaderboard(); // Update leaderboard after a game ends
             }
         }
 
@@ -194,6 +237,9 @@
             gameData = data;
             updateBoard();
             updateStatus();
+            // Refresh player info
+            document.querySelector('.flex.items-center:last-child .font-semibold').textContent = gameData.opponent_id || 'Waiting...';
+            document.querySelector('.flex.items-center:last-child .avatar-frame').textContent = gameData.opponent_id ? gameData.opponent_id[0].toUpperCase() : '?';
         });
 
         socket.on('game_update', (data) => {
@@ -202,8 +248,13 @@
             updateStatus();
         });
 
+        socket.on('join_error', (data) => {
+            alert(data.error);
+        });
+
         // Initialize the game
         document.addEventListener('DOMContentLoaded', () => {
+            fetchLeaderboard();
             if (roomId && gameData) {
                 initBoard();
                 updateStatus();

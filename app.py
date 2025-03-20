@@ -32,6 +32,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Flag to prevent multiple bot polling instances
 bot_polling_started = False
+bot_app = None
 
 # Database initialization
 def init_db():
@@ -41,7 +42,8 @@ def init_db():
             user_id TEXT PRIMARY KEY,
             username TEXT,
             full_name TEXT,
-            language_code TEXT
+            language_code TEXT,
+            wins INTEGER DEFAULT 0
         )''')
         c.execute('''CREATE TABLE IF NOT EXISTS games (
             room_id TEXT PRIMARY KEY,
@@ -99,9 +101,11 @@ class ChainReactionGame:
         if player1_cells == 0 and player2_cells > 0 and self.opponent_id is not None:
             self.status = "finished"
             self.winner = 2
+            self._update_wins(self.opponent_id)
         elif player2_cells == 0 and player1_cells > 0 and self.opponent_id is not None:
             self.status = "finished"
             self.winner = 1
+            self._update_wins(self.host_id)
 
         # Switch turns if game is still in progress
         if self.status == "in_progress":
@@ -109,6 +113,12 @@ class ChainReactionGame:
 
         self._trigger_callback("game_status_change")
         return True
+
+    def _update_wins(self, winner_id):
+        with sqlite3.connect('games.db') as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET wins = wins + 1 WHERE user_id = ?", (winner_id,))
+            conn.commit()
 
     def _process_chain_reaction(self, row, col, player):
         rows, cols = 6, 9
@@ -242,6 +252,14 @@ def make_move():
     else:
         return jsonify({"error": "Invalid move"}), 400
 
+@app.route('/leaderboard', methods=['GET'])
+def leaderboard():
+    with sqlite3.connect('games.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT username, wins FROM users ORDER BY wins DESC LIMIT 10")
+        leaders = c.fetchall()
+    return jsonify([{"username": username, "wins": wins} for username, wins in leaders])
+
 @app.route('/debug', methods=['GET'])
 def debug():
     return "Chain Reaction Game v1.0 - Flask is running!"
@@ -262,6 +280,8 @@ def on_join_game(data):
                       (user_id, "in_progress", room_id))
             conn.commit()
         emit('game_start', game.to_dict(), room=room_id)
+    else:
+        emit('join_error', {"error": "Unable to join game"}, to=user_id)
 
 @socketio.on('game_update')
 def on_game_update(data):
@@ -304,7 +324,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Upsert user
     with sqlite3.connect('games.db') as conn:
         c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO users (user_id, username, full_name, language_code) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT OR REPLACE INTO users (user_id, username, full 🙂name, language_code) VALUES (?, ?, ?, ?)",
                   (user_id, username, f"{user.first_name} {user.last_name or ''}".strip(), language_code))
         conn.commit()
 
@@ -380,7 +400,7 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Function to run Telegram bot polling in a separate thread
 def run_bot():
-    global bot_polling_started
+    global bot_polling_started, bot_app
     if bot_polling_started:
         logger.warning("Bot polling already started, skipping duplicate instance")
         return
@@ -391,16 +411,4 @@ def run_bot():
     asyncio.set_event_loop(loop)
 
     # Initialize the bot
-    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
-    bot_app.add_handler(InlineQueryHandler(inline_query))
-    bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
-    logger.info("Starting bot polling...")
-
-    # Run the polling in the new event loop
-    loop.run_until_complete(bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True))
-
-# Start the Telegram bot in a separate thread
-bot_thread = threading.Thread(target=run_bot, daemon=True)
-bot_thread.start()
+    bot_app = Application.builder().token(TELEGRAM_TOKEN
