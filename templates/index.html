@@ -3,9 +3,7 @@
 <head>
     <title>Chain Reaction</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Telegram UI CSS -->
     <link rel="stylesheet" href="https://unpkg.com/@telegram-apps/telegram-ui@2.1.7/dist/styles.css">
-    <!-- Socket.IO for real-time updates -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         body {
@@ -97,44 +95,9 @@
             50% { transform: scale(1.5); background: #FFD700; }
             100% { transform: scale(1); }
         }
-        #game-timer {
-            font-size: 1.5em;
-            margin: 10px 0;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        }
         #game-status {
             display: none;
             margin: 10px 0;
-        }
-        #leaderboard ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        #leaderboard li {
-            display: flex;
-            align-items: center;
-            margin: 8px 0;
-            font-size: 1.1em;
-        }
-        .avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            margin-right: 10px;
-            border: 2px solid #FFD700;
-        }
-        .tg-button {
-            padding: 12px 35px;
-            font-size: 1.2em;
-            border-radius: 12px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            transition: transform 0.1s ease, box-shadow 0.3s ease;
-            margin: 5px;
-        }
-        .tg-button:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         footer {
             position: absolute;
@@ -149,25 +112,12 @@
     <h1>🎮 Chain Reaction</h1>
     <div class="tg-card">
         <p>{{ username }} (ID: {{ user_id }})</p>
-        <p>Total Taps: <span id="total-taps">{{ total_taps }}</span> | Referrals: <span id="referrals">{{ referrals }}</span></p>
     </div>
     <div class="tg-card" id="game-status">
-        <p>You: <span id="player1-score">0</span> | Opponent: <span id="player2-score">0</span></p>
+        <p>Player 1: <span id="player1-score">0</span> | Player 2: <span id="player2-score">0</span></p>
         <p>Turn: <span id="current-turn"></span></p>
     </div>
-    <div id="game-timer"></div>
     <div id="game-board"></div>
-    <div class="tg-card" id="leaderboard">
-        <h3>🏆 Leaderboard</h3>
-        <ul>
-            {% for user in leaderboard %}
-                <li>
-                    <img src="https://ui-avatars.com/api/?name={{ user[0] }}&background=FFD700&color=000" class="avatar" alt="Avatar">
-                    {{ user[0] }}: {{ user[1] }} Coins
-                </li>
-            {% endfor %}
-        </ul>
-    </div>
     <footer>©️2025 Chain Reaction by Gagan Saini</footer>
 
     <script>
@@ -175,8 +125,7 @@
         const roomId = "{{ room_id }}";
         const gameData = {{ game_data | tojson | safe }};
         let gameActive = false;
-        let remainingTime = gameData ? gameData.duration : 0;
-        let board = gameData ? JSON.parse(gameData.board) : null;
+        let board = gameData ? gameData.board : null;
         let currentTurn = gameData ? gameData.current_turn : null;
 
         // Initialize Socket.IO
@@ -188,55 +137,28 @@
 
         socket.on('game_start', (data) => {
             gameActive = true;
-            remainingTime = data.duration;
-            board = JSON.parse(gameData.board);
-            currentTurn = data.player1_id;
+            board = data.board;
+            currentTurn = data.current_turn;
             document.getElementById('game-status').style.display = 'block';
             document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
             renderBoard();
-            startTimer();
         });
 
         socket.on('game_update', (data) => {
             board = data.board;
             currentTurn = data.current_turn;
-            document.getElementById('player1-score').textContent = data.player1_score;
-            document.getElementById('player2-score').textContent = data.player2_score;
+            const player1Score = board.flat().filter(cell => cell > 0 && cell % 10 === 1).length;
+            const player2Score = board.flat().filter(cell => cell > 0 && cell % 10 === 2).length;
+            document.getElementById('player1-score').textContent = player1Score;
+            document.getElementById('player2-score').textContent = player2Score;
             document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
             renderBoard();
-            if (data.game_over) {
+            if (data.status === "finished") {
                 gameActive = false;
-                const winner = data.winner === 1 ? (data.player1_id === userId ? "You" : "Opponent") : (data.player2_id === userId ? "You" : "Opponent");
-                window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_score} | Opponent: ${data.player2_score}`);
-                document.getElementById('game-timer').textContent = "Game Over";
+                const winner = data.winner === 1 ? (data.host_id === userId ? "You" : "Opponent") : (data.opponent_id === userId ? "You" : "Opponent");
+                window.Telegram.WebApp.showAlert(`${winner} wins! Player 1: ${player1Score} | Player 2: ${player2Score}`);
             }
         });
-
-        socket.on('timer_update', (data) => {
-            remainingTime = data.remaining_time;
-            document.getElementById('game-timer').textContent = `Time: ${Math.ceil(remainingTime)}s`;
-        });
-
-        socket.on('game_end', (data) => {
-            gameActive = false;
-            const winner = data.winner === userId ? "You" : "Opponent";
-            window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_score} | Opponent: ${data.player2_score}`);
-            document.getElementById('game-timer').textContent = "Game Over";
-        });
-
-        function startTimer() {
-            const timerInterval = setInterval(() => {
-                if (!gameActive) {
-                    clearInterval(timerInterval);
-                    return;
-                }
-                remainingTime -= 1;
-                socket.emit('game_timer', { room_id: roomId, remaining_time: remainingTime });
-                if (remainingTime <= 0) {
-                    clearInterval(timerInterval);
-                }
-            }, 1000);
-        }
 
         function renderBoard() {
             const gameBoard = document.getElementById('game-board');
@@ -263,10 +185,10 @@
             if (!response.ok) {
                 alert(data.error || 'Move failed!');
             }
-            // Haptic feedback
             if (window.Telegram && window.Telegram.WebApp) {
                 window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
             }
+            socket.emit('game_update', data);
         }
 
         // Initial render
