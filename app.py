@@ -4,6 +4,8 @@ eventlet.monkey_patch()  # Must be the first import
 import os
 import sqlite3
 import logging
+import threading
+import asyncio
 from datetime import datetime
 from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
@@ -355,11 +357,23 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
         game.on("game_status_change", update_message)
 
-# Start Telegram bot polling at module level
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
-bot_app.add_handler(InlineQueryHandler(inline_query))
-bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
-logger.info("Starting bot polling...")
-bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+# Function to run Telegram bot polling in a separate thread
+def run_bot():
+    # Create a new event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Initialize the bot
+    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
+    bot_app.add_handler(InlineQueryHandler(inline_query))
+    bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
+    logger.info("Starting bot polling...")
+
+    # Run the polling in the new event loop
+    loop.run_until_complete(bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True))
+
+# Start the Telegram bot in a separate thread
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
