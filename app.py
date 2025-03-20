@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()  # Must be the first import
+
 import os
 import sqlite3
 import logging
@@ -48,6 +51,7 @@ def init_db():
             winner INTEGER
         )''')
         conn.commit()
+    logger.info("Database initialized successfully")
 
 # Chain Reaction Game Logic
 class ChainReactionGame:
@@ -240,6 +244,11 @@ def on_join_game(data):
             conn.commit()
         emit('game_start', game.to_dict(), room=room_id)
 
+@socketio.on('game_update')
+def on_game_update(data):
+    room_id = data['room_id']
+    emit('game_update', data, room=room_id)
+
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -346,8 +355,9 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Function to run Flask app with SocketIO
 def run_flask():
-    init_db()
+    init_db()  # Ensure database is initialized before starting the server
     logger.info("Starting Flask on 0.0.0.0:5000")
+    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
 
 # Function to run Telegram bot
 def run_bot():
@@ -360,6 +370,8 @@ def run_bot():
     bot_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
+    # Run Flask in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
+    # Run Telegram bot in the main thread
     run_bot()
