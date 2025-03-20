@@ -8,7 +8,7 @@ from datetime import datetime
 from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
 from dotenv import load_dotenv
 import uuid
 import json
@@ -359,7 +359,7 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
-bot_app.add_handler(Update.handler("inline_query", inline_query))
-bot_app.add_handler(Update.handler("chosen_inline_result", chosen_inline_result))
+bot_app.add_handler(InlineQueryHandler(inline_query))
+bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
 logger.info("Starting bot polling...")
 bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
