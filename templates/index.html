@@ -6,6 +6,7 @@
     <title>Chain Reaction</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         .cell {
             width: 40px;
@@ -64,6 +65,19 @@
             border-radius: 5px;
             display: none;
         }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gradient-to-r from-blue-100 to-purple-100 flex flex-col items-center justify-center min-h-screen">
@@ -73,23 +87,27 @@
             <!-- Players will be populated dynamically -->
         </div>
         <div id="status" class="text-center mb-4 text-lg font-semibold text-gray-800">
-            {% if room_id %}
+            {% if game_data and game_data.status == "not_started" %}
                 Waiting for players...
             {% else %}
                 Click "Start Game" to begin!
             {% endif %}
         </div>
-        <div id="board" class="grid grid-cols-9 gap-1 mb-4 {% if not room_id %}hidden{% endif %}">
+        <div id="loading" class="hidden mb-4">
+            <div class="spinner"></div>
+            <p class="text-center text-gray-600 mt-2">Loading...</p>
+        </div>
+        <div id="board" class="grid grid-cols-9 gap-1 mb-4 {% if not game_data or game_data.status != 'in_progress' %}hidden{% endif %}">
             <!-- Board will be populated dynamically -->
         </div>
         <div id="player-info" class="text-center mb-4">
             <p class="text-sm text-gray-600">User ID: <span id="user-id">{{ user_id }}</span></p>
             <p class="text-sm text-gray-600">Room ID: <span id="room-id">{{ room_id if room_id else 'Not yet created' }}</span></p>
         </div>
-        <button id="start-game-button" class="bg-green-500 text-white px-4 py-2 rounded w-full hover:bg-green-600 {% if room_id %}hidden{% endif %}">
+        <button id="start-game-button" class="bg-green-500 text-white px-4 py-2 rounded w-full hover:bg-green-600 {% if game_data and game_data.status != 'not_started' %}hidden{% endif %}">
             Start Game
         </button>
-        <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 {% if not room_id %}hidden{% endif %}">
+        <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 {% if not game_data or game_data.status != 'not_started' %}hidden{% endif %}">
             Share Game Link
         </button>
         <div class="mt-4">
@@ -102,20 +120,52 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        const socket = io('https://crypto-king-v2.onrender.com');
+        // Initialize Telegram Web App
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
+
+        const socket = io('https://crypto-king-v2.onrender.com', {
+            reconnection: true,
+            reconnectionAttempts: 3,
+            reconnectionDelay: 1000
+        });
         let userId = '{{ user_id }}';
         let username = '{{ username }}';
         let roomId = '{{ room_id }}';
         let gameData = {{ game_data | tojson | safe }};
 
+        // Show loading spinner
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('start-game-button').setAttribute('disabled', 'true');
+            document.getElementById('share-button').setAttribute('disabled', 'true');
+        }
+
+        // Hide loading spinner
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('start-game-button').removeAttribute('disabled');
+            document.getElementById('share-button').removeAttribute('disabled');
+        }
+
         // Fetch and display leaderboard
         async function fetchLeaderboard() {
-            const response = await fetch('/leaderboard');
-            const leaders = await response.json();
-            const leaderboardDiv = document.getElementById('leaderboard');
-            leaderboardDiv.innerHTML = leaders.map((leader, index) => `
-                <p>${index + 1}. ${leader.username}: ${leader.wins} wins</p>
-            `).join('');
+            try {
+                const response = await fetch('/leaderboard');
+                const leaders = await response.json();
+                if (leaders.error) {
+                    throw new Error(leaders.error);
+                }
+                const leaderboardDiv = document.getElementById('leaderboard');
+                leaderboardDiv.innerHTML = leaders.map((leader, index) => `
+                    <p>${index + 1}. ${leader.username}: ${leader.wins} wins</p>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to fetch leaderboard:', error);
+                document.getElementById('leaderboard').innerHTML = '<p class="text-red-500">Failed to load leaderboard</p>';
+            }
         }
 
         // Update players list
@@ -190,18 +240,26 @@
             }
             const row = parseInt(event.target.dataset.row);
             const col = parseInt(event.target.dataset.col);
-            const response = await fetch(`/make_move?user_id=${userId}&room_id=${roomId}&row=${row}&col=${col}`, {
-                method: 'POST'
-            });
-            const result = await response.json();
-            if (result.error) {
-                alert(result.error);
-            } else {
-                gameData = result;
-                socket.emit('game_update', { room_id: roomId, game_data: gameData });
-                updateBoard();
-                updateStatus();
-                fetchLeaderboard();
+            showLoading();
+            try {
+                const response = await fetch(`/make_move?user_id=${userId}&room_id=${roomId}&row=${row}&col=${col}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.error) {
+                    alert(result.error);
+                } else {
+                    gameData = result;
+                    socket.emit('game_update', { room_id: roomId, game_data: gameData });
+                    updateBoard();
+                    updateStatus();
+                    fetchLeaderboard();
+                }
+            } catch (error) {
+                console.error('Failed to make move:', error);
+                alert('Failed to make move. Please try again.');
+            } finally {
+                hideLoading();
             }
         }
 
@@ -248,22 +306,30 @@
 
         // Start a new game
         document.getElementById('start-game-button').addEventListener('click', async () => {
-            const response = await fetch(`/start_game?user_id=${userId}&username=${username}`, {
-                method: 'POST'
-            });
-            const result = await response.json();
-            if (result.error) {
-                alert(result.error);
-            } else {
-                roomId = result.room_id;
-                gameData = result.game_data;
-                document.getElementById('room-id').textContent = roomId;
-                document.getElementById('start-game-button').classList.add('hidden');
-                document.getElementById('share-button').classList.remove('hidden');
-                initBoard();
-                updatePlayers();
-                updateStatus();
-                socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
+            showLoading();
+            try {
+                const response = await fetch(`/start_game?user_id=${userId}&username=${username}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.error) {
+                    alert(result.error);
+                } else {
+                    roomId = result.room_id;
+                    gameData = result.game_data;
+                    document.getElementById('room-id').textContent = roomId;
+                    document.getElementById('start-game-button').classList.add('hidden');
+                    document.getElementById('share-button').classList.remove('hidden');
+                    initBoard();
+                    updatePlayers();
+                    updateStatus();
+                    socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
+                }
+            } catch (error) {
+                console.error('Failed to start game:', error);
+                alert('Failed to start game. Please try again.');
+            } finally {
+                hideLoading();
             }
         });
 
@@ -272,14 +338,36 @@
             const gameUrl = `https://crypto-king-v2.onrender.com/?user_id=${userId}&username=${username}&room_id=${roomId}`;
             navigator.clipboard.writeText(gameUrl).then(() => {
                 alert('Game link copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy link:', err);
+                alert('Failed to copy link. Please copy manually: ' + gameUrl);
             });
         });
 
         // Socket.IO events
         socket.on('connect', () => {
+            console.log('Connected to server');
             if (roomId) {
                 socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
             }
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            showToast('Connection error. Retrying...');
+        });
+
+        socket.on('reconnect', (attempt) => {
+            console.log('Reconnected after', attempt, 'attempts');
+            showToast('Reconnected to server!');
+            if (roomId) {
+                socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
+            }
+        });
+
+        socket.on('reconnect_failed', () => {
+            console.error('Reconnection failed');
+            showToast('Failed to reconnect. Please refresh the page.');
         });
 
         socket.on('game_start', (data) => {
