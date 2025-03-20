@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Crypto King</title>
+    <title>Chain Reaction</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- Telegram UI CSS -->
     <link rel="stylesheet" href="https://unpkg.com/@telegram-apps/telegram-ui@2.1.7/dist/styles.css">
@@ -12,7 +12,7 @@
             margin: 0;
             padding: 0;
             font-family: 'Arial', sans-serif;
-            background: url('https://img.freepik.com/free-vector/royal-throne-room-with-red-carpet_23-2148464185.jpg') no-repeat center center fixed;
+            background: url('https://img.freepik.com/free-vector/abstract-background-with-geometric-shapes_23-2148464185.jpg') no-repeat center center fixed;
             background-size: cover;
             color: #fff;
             display: flex;
@@ -61,76 +61,50 @@
             margin: 5px 0;
             font-size: 1.2em;
         }
-        #energy-bar {
-            width: 100%;
-            height: 14px;
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            grid-gap: 2px;
             background: rgba(0, 0, 0, 0.5);
-            border-radius: 7px;
-            overflow: hidden;
-            margin: 5px 0;
-        }
-        #energy-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #FFD700, #FFA500);
-            transition: width 0.3s ease;
-            box-shadow: 0 0 12px #FFD700;
-        }
-        #coin-container {
-            position: relative;
-            width: 200px;
-            height: 200px;
-            margin: 20px 0;
-            cursor: pointer;
+            padding: 5px;
+            border-radius: 10px;
             z-index: 1;
         }
-        #coin {
-            width: 100%;
-            height: 100%;
-            background: url('https://img.icons8.com/emoji/96/king.png') no-repeat center;
-            background-size: contain;
-            transition: transform 0.2s ease, filter 0.3s ease;
-            filter: drop-shadow(0 0 15px #FFD700);
+        .cell {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
         }
-        #coin.tapped {
-            transform: scale(1.4) rotate(20deg);
-            filter: drop-shadow(0 0 25px #FFD700) brightness(1.2);
+        .cell.player1 {
+            background: #FF5555;
+            color: #fff;
         }
-        #tap-effect {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 3em;
-            color: #FFD700;
-            opacity: 0;
-            transition: opacity 0.6s ease, transform 0.6s ease;
-            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+        .cell.player2 {
+            background: #55FF55;
+            color: #000;
         }
-        #tap-effect.show {
-            opacity: 1;
-            transform: translate(-50%, -120%);
+        .cell.explode {
+            animation: explode 0.5s ease;
         }
-        #particles {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
+        @keyframes explode {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.5); background: #FFD700; }
+            100% { transform: scale(1); }
         }
-        .particle {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background: #FFD700;
-            border-radius: 50%;
-            opacity: 0.9;
-            animation: particleFade 1.2s ease-out forwards;
+        #game-timer {
+            font-size: 1.5em;
+            margin: 10px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
         }
-        @keyframes particleFade {
-            0% { opacity: 0.9; transform: scale(1); }
-            100% { opacity: 0; transform: scale(0) translateY(-60px); }
+        #game-status {
+            display: none;
+            margin: 10px 0;
         }
         #leaderboard ul {
             list-style: none;
@@ -162,15 +136,6 @@
             transform: scale(0.95);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        #game-timer {
-            font-size: 1.5em;
-            margin: 10px 0;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        }
-        #opponent-stats {
-            display: none;
-            margin: 10px 0;
-        }
         footer {
             position: absolute;
             bottom: 10px;
@@ -181,27 +146,17 @@
     </style>
 </head>
 <body>
-    <h1>👑 Crypto King</h1>
+    <h1>🎮 Chain Reaction</h1>
     <div class="tg-card">
         <p>{{ username }} (ID: {{ user_id }})</p>
         <p>Total Taps: <span id="total-taps">{{ total_taps }}</span> | Referrals: <span id="referrals">{{ referrals }}</span></p>
     </div>
-    <div class="tg-card">
-        <p>Coins: <span id="coins">{{ coins }}</span></p>
-        <p>Energy: <span id="energy">{{ energy }}</span></p>
-        <div id="energy-bar">
-            <div id="energy-fill" style="width: {{ energy }}%;"></div>
-        </div>
+    <div class="tg-card" id="game-status">
+        <p>You: <span id="player1-score">0</span> | Opponent: <span id="player2-score">0</span></p>
+        <p>Turn: <span id="current-turn"></span></p>
     </div>
     <div id="game-timer"></div>
-    <div class="tg-card" id="opponent-stats">
-        <p>You: <span id="player1-coins">0</span> | Opponent: <span id="player2-coins">0</span></p>
-    </div>
-    <div id="coin-container" onclick="mineCoins()">
-        <div id="coin"></div>
-        <div id="tap-effect">+1</div>
-        <div id="particles"></div>
-    </div>
+    <div id="game-board"></div>
     <div class="tg-card" id="leaderboard">
         <h3>🏆 Leaderboard</h3>
         <ul>
@@ -213,11 +168,7 @@
             {% endfor %}
         </ul>
     </div>
-    <div>
-        <button class="tg-button tg-main-button" onclick="mineCoins()" id="mine-btn">Tap to Mine</button>
-        <button class="tg-button tg-secondary-button" onclick="shareBot()">Share & Earn</button>
-    </div>
-    <footer>©️2025 Crypto King by Gagan Saini</footer>
+    <footer>©️2025 Chain Reaction by Gagan Saini</footer>
 
     <script>
         const userId = "{{ user_id }}";
@@ -225,6 +176,8 @@
         const gameData = {{ game_data | tojson | safe }};
         let gameActive = false;
         let remainingTime = gameData ? gameData.duration : 0;
+        let board = gameData ? JSON.parse(gameData.board) : null;
+        let currentTurn = gameData ? gameData.current_turn : null;
 
         // Initialize Socket.IO
         const socket = io();
@@ -236,13 +189,27 @@
         socket.on('game_start', (data) => {
             gameActive = true;
             remainingTime = data.duration;
-            document.getElementById('opponent-stats').style.display = 'block';
+            board = JSON.parse(gameData.board);
+            currentTurn = data.player1_id;
+            document.getElementById('game-status').style.display = 'block';
+            document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
+            renderBoard();
             startTimer();
         });
 
         socket.on('game_update', (data) => {
-            document.getElementById('player1-coins').textContent = data.player1_coins;
-            document.getElementById('player2-coins').textContent = data.player2_coins;
+            board = data.board;
+            currentTurn = data.current_turn;
+            document.getElementById('player1-score').textContent = data.player1_score;
+            document.getElementById('player2-score').textContent = data.player2_score;
+            document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
+            renderBoard();
+            if (data.game_over) {
+                gameActive = false;
+                const winner = data.winner === 1 ? (data.player1_id === userId ? "You" : "Opponent") : (data.player2_id === userId ? "You" : "Opponent");
+                window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_score} | Opponent: ${data.player2_score}`);
+                document.getElementById('game-timer').textContent = "Game Over";
+            }
         });
 
         socket.on('timer_update', (data) => {
@@ -253,9 +220,8 @@
         socket.on('game_end', (data) => {
             gameActive = false;
             const winner = data.winner === userId ? "You" : "Opponent";
-            window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_coins} | Opponent: ${data.player2_coins}`);
+            window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_score} | Opponent: ${data.player2_score}`);
             document.getElementById('game-timer').textContent = "Game Over";
-            document.getElementById('mine-btn').disabled = true;
         });
 
         function startTimer() {
@@ -272,69 +238,39 @@
             }, 1000);
         }
 
-        async function mineCoins() {
-            if (!gameActive && roomId) return;
-            const btn = document.getElementById('mine-btn');
-            const coin = document.getElementById('coin');
-            const tapEffect = document.getElementById('tap-effect');
-            const particlesContainer = document.getElementById('particles');
-            btn.disabled = true;
-
-            // Trigger tap animation
-            coin.classList.add('tapped');
-            tapEffect.classList.add('show');
-
-            // Create particle effects
-            for (let i = 0; i < 12; i++) {
-                const particle = document.createElement('div');
-                particle.classList.add('particle');
-                const angle = Math.random() * 360;
-                const distance = Math.random() * 60 + 30;
-                particle.style.left = '50%';
-                particle.style.top = '50%';
-                particle.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(-${distance}px)`;
-                particlesContainer.appendChild(particle);
+        function renderBoard() {
+            const gameBoard = document.getElementById('game-board');
+            gameBoard.innerHTML = '';
+            for (let row = 0; row < 6; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    const atoms = board[row][col] % 10;
+                    const player = board[row][col] > 0 ? (board[row][col] % 10 === 1 ? 1 : 2) : 0;
+                    if (player === 1) cell.classList.add('player1');
+                    if (player === 2) cell.classList.add('player2');
+                    cell.textContent = atoms > 0 ? atoms : '';
+                    cell.onclick = () => makeMove(row, col);
+                    gameBoard.appendChild(cell);
+                }
             }
+        }
 
+        async function makeMove(row, col) {
+            if (!gameActive || currentTurn !== userId) return;
+            const response = await fetch(`/make_move?user_id=${userId}&room_id=${roomId}&row=${row}&col=${col}`, { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                alert(data.error || 'Move failed!');
+            }
             // Haptic feedback
             if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-            }
-
-            const response = await fetch(`/mine?user_id=${userId}${roomId ? '&room_id=' + roomId : ''}`, { method: 'POST' });
-            const data = await response.json();
-
-            if (response.ok) {
-                document.getElementById('coins').textContent = data.coins;
-                document.getElementById('energy').textContent = data.energy;
-                document.getElementById('energy-fill').style.width = `${data.energy}%`;
-                document.getElementById('total-taps').textContent = data.total_taps;
-                if (data.energy > 0) btn.disabled = false;
-            } else {
-                alert(data.error || 'Mining failed!');
-                btn.disabled = false;
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
             }
         }
 
-        async function shareBot() {
-            const userId = "{{ user_id }}";
-            const shareUrl = `https://t.me/<YourBotName>?start=${userId}`;
-            const shareText = `Join me on Crypto King and start mining coins! 👑 Tap to earn: ${shareUrl}`;
-
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`);
-                
-                const response = await fetch(`/refer?user_id=${userId}`, { method: 'POST' });
-                const data = await response.json();
-                if (response.ok) {
-                    document.getElementById('coins').textContent = data.coins;
-                    document.getElementById('referrals').textContent = data.referrals;
-                    window.Telegram.WebApp.showAlert('Thanks for sharing! You earned 50 coins!');
-                }
-            } else {
-                alert('Please open this app in Telegram to share.');
-            }
-        }
+        // Initial render
+        if (board) renderBoard();
 
         // Telegram Mini App integration
         if (window.Telegram && window.Telegram.WebApp) {

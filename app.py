@@ -5,7 +5,7 @@ from datetime import datetime
 from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
 import threading
 import uuid
@@ -43,33 +43,15 @@ def init_db():
             room_id TEXT PRIMARY KEY,
             player1_id TEXT,
             player2_id TEXT,
-            player1_coins INTEGER DEFAULT 0,
-            player2_coins INTEGER DEFAULT 0,
+            player1_score INTEGER DEFAULT 0,
+            player2_score INTEGER DEFAULT 0,
+            board TEXT,
+            current_turn TEXT,
             mode TEXT,
             start_time TIMESTAMP,
             duration INTEGER,
             status TEXT
         )''')
-        conn.commit()
-
-# Refill energy based on elapsed time
-def refill_energy(user_id):
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute("SELECT energy, last_refill FROM users WHERE user_id = ?", (user_id,))
-        result = c.fetchone()
-        if result:
-            energy, last_refill = result
-            if last_refill:
-                last_time = datetime.fromisoformat(last_refill)
-                now = datetime.now()
-                elapsed_minutes = (now - last_time).total_seconds() // 60
-                new_energy = min(100, energy + int(elapsed_minutes * 2))
-                c.execute("UPDATE users SET energy = ?, last_refill = ? WHERE user_id = ?",
-                          (new_energy, now.isoformat(), user_id))
-            else:
-                c.execute("UPDATE users SET energy = 100, last_refill = ? WHERE user_id = ?",
-                          (datetime.now().isoformat(), user_id))
         conn.commit()
 
 # Flask Routes
@@ -87,20 +69,16 @@ def index():
     
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
-        c.execute("SELECT coins, energy, username, total_taps, referrals FROM users WHERE user_id = ?", (user_id,))
+        c.execute("SELECT coins, username, total_taps, referrals FROM users WHERE user_id = ?", (user_id,))
         user = c.fetchone()
         if not user:
             c.execute("INSERT INTO users (user_id, username, coins, energy, total_taps, referrals, last_refill) VALUES (?, ?, 0, 100, 0, 0, ?)",
                       (user_id, username, datetime.now().isoformat()))
             conn.commit()
-            coins, energy, username, total_taps, referrals = 0, 100, username, 0, 0
+            coins, username, total_taps, referrals = 0, username, 0, 0
         else:
-            coins, energy, stored_username, total_taps, referrals = user
+            coins, stored_username, total_taps, referrals = user
             username = stored_username or username
-            refill_energy(user_id)
-            c.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-            c.execute("SELECT coins, energy, total_taps, referrals FROM users WHERE user_id = ?", (user_id,))
-            coins, energy, total_taps, referrals = c.fetchone()
     
     c.execute("SELECT username, coins FROM users ORDER BY coins DESC LIMIT 5")
     leaderboard = c.fetchall()
@@ -108,92 +86,95 @@ def index():
     game_data = None
     if room_id:
         c.execute("SELECT * FROM games WHERE room_id = ? AND status = 'active'", (room_id,))
-        game_data = c.fetchone()
-        if game_data:
+        game = c.fetchone()
+        if game:
             game_data = {
-                'room_id': game_data[0],
-                'player1_id': game_data[1],
-                'player2_id': game_data[2],
-                'player1_coins': game_data[3],
-                'player2_coins': game_data[4],
-                'mode': game_data[5],
-                'duration': game_data[7]
+                'room_id': game[0],
+                'player1_id': game[1],
+                'player2_id': game[2],
+                'player1_score': game[3],
+                'player2_score': game[4],
+                'board': game[5],
+                'current_turn': game[6],
+                'mode': game[7],
+                'duration': game[9]
             }
 
-    return render_template('index.html', coins=coins, energy=energy, user_id=user_id, username=username,
+    return render_template('index.html', coins=coins, user_id=user_id, username=username,
                            total_taps=total_taps, referrals=referrals, leaderboard=leaderboard,
                            room_id=room_id, game_data=game_data)
 
-@app.route('/mine', methods=['POST'])
-def mine():
+@app.route('/make_move', methods=['POST'])
+def make_move():
     user_id = request.args.get('user_id')
     room_id = request.args.get('room_id')
-    if not user_id:
-        return jsonify({"error": "No user_id provided"}), 400
+    row = int(request.args.get('row'))
+    col = int(request.args.get('col'))
+    
+    if not user_id or not room_id:
+        return jsonify({"error": "Missing user_id or room_id"}), 400
     
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
-        c.execute("SELECT coins, energy, total_taps FROM users WHERE user_id = ?", (user_id,))
-        user = c.fetchone()
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-        coins, energy, total_taps = user
-        if energy < 1:
-            return jsonify({"error": "Not enough energy"}), 400
+        c.execute("SELECT player1_id, player2_id, board, current_turn, player1_score, player2_score FROM games WHERE room_id = ? AND status = 'active'", (room_id,))
+        game = c.fetchone()
+        if not game:
+            return jsonify({"error": "Game not found"}), 404
         
-        c.execute("UPDATE users SET coins = coins + 1, energy = energy - 1, total_taps = total_taps + 1 WHERE user_id = ?", (user_id,))
+        player1_id, player2_id, board, current_turn, player1_score, player2_score = game
+        if user_id != current_turn:
+            return jsonify({"error": "Not your turn"}), 400
+        
+        # Parse the board (stored as a JSON string)
+        import json
+        board = json.loads(board)
+        
+        # Chain Reaction logic
+        player = 1 if user_id == player1_id else 2
+        board, game_over, winner = process_chain_reaction(board, row, col, player)
+        
+        # Update scores
+        player1_score = sum(1 for row in board for cell in row if cell > 0 and cell % 10 == 1)
+        player2_score = sum(1 for row in board for cell in row if cell > 0 and cell % 10 == 2)
+        
+        # Switch turns
+        next_turn = player2_id if user_id == player1_id else player1_id
+        
+        # Update game state
+        status = 'active' if not game_over else 'finished'
+        c.execute("UPDATE games SET board = ?, current_turn = ?, player1_score = ?, player2_score = ?, status = ? WHERE room_id = ?",
+                  (json.dumps(board), next_turn, player1_score, player2_score, status, room_id))
         conn.commit()
-        c.execute("SELECT coins, energy, total_taps FROM users WHERE user_id = ?", (user_id,))
-        coins, energy, total_taps = c.fetchone()
-
-        if room_id:
-            c.execute("SELECT player1_id, player2_id, player1_coins, player2_coins FROM games WHERE room_id = ? AND status = 'active'", (room_id,))
-            game = c.fetchone()
-            if game:
-                player1_id, player2_id, player1_coins, player2_coins = game
-                if user_id == player1_id:
-                    player1_coins += 1
-                    c.execute("UPDATE games SET player1_coins = ? WHERE room_id = ?", (player1_coins, room_id))
-                elif user_id == player2_id:
-                    player2_coins += 1
-                    c.execute("UPDATE games SET player2_coins = ? WHERE room_id = ?", (player2_coins, room_id))
-                conn.commit()
-                socketio.emit('game_update', {
-                    'room_id': room_id,
-                    'player1_coins': player1_coins,
-                    'player2_coins': player2_coins
-                }, room=room_id)
+        
+        # Emit game update
+        socketio.emit('game_update', {
+            'room_id': room_id,
+            'board': board,
+            'current_turn': next_turn,
+            'player1_score': player1_score,
+            'player2_score': player2_score,
+            'game_over': game_over,
+            'winner': winner
+        }, room=room_id)
     
-    return jsonify({"coins": coins, "energy": energy, "total_taps": total_taps})
-
-@app.route('/refer', methods=['POST'])
-def refer():
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({"error": "No user_id provided"}), 400
-    
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute("UPDATE users SET referrals = referrals + 1, coins = coins + 50 WHERE user_id = ?",
-                  (user_id,))
-        conn.commit()
-        c.execute("SELECT coins, referrals FROM users WHERE user_id = ?", (user_id,))
-        coins, referrals = c.fetchone()
-    
-    return jsonify({"coins": coins, "referrals": referrals})
+    return jsonify({"board": board, "current_turn": next_turn, "player1_score": player1_score, "player2_score": player2_score})
 
 @app.route('/create_game', methods=['POST'])
 def create_game():
     user_id = request.args.get('user_id')
     username = request.args.get('username')
     mode = request.args.get('mode', 'rapid')
-    duration = 60 if mode == 'rapid' else 30  # 60 seconds for rapid, 30 for blitz
+    duration = 60 if mode == 'rapid' else 30
     
     room_id = str(uuid.uuid4())
+    # Initialize a 6x9 Chain Reaction board (0 = empty, 1x = player 1, 2x = player 2)
+    board = [[0 for _ in range(9)] for _ in range(6)]
+    
     with sqlite3.connect('users.db') as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO games (room_id, player1_id, mode, start_time, duration, status) VALUES (?, ?, ?, ?, ?, 'waiting')",
-                  (room_id, user_id, mode, datetime.now().isoformat(), duration))
+        import json
+        c.execute("INSERT INTO games (room_id, player1_id, board, current_turn, mode, start_time, duration, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting')",
+                  (room_id, user_id, json.dumps(board), user_id, mode, datetime.now().isoformat(), duration))
         conn.commit()
     
     game_rooms[room_id] = {'player1_id': user_id, 'player2_id': None, 'mode': mode, 'duration': duration}
@@ -201,7 +182,52 @@ def create_game():
 
 @app.route('/debug', methods=['GET'])
 def debug():
-    return "Crypto King Mining Game v1.0 - Flask is running!"
+    return "Chain Reaction Game v1.0 - Flask is running!"
+
+# Chain Reaction Logic
+def process_chain_reaction(board, row, col, player):
+    rows, cols = len(board), len(board[0])
+    # Add atom to the cell
+    board[row][col] = board[row][col] + (10 * player) + 1
+    
+    # Check critical mass (corner: 2, edge: 3, middle: 4)
+    def get_critical_mass(r, c):
+        if (r == 0 or r == rows - 1) and (c == 0 or c == cols - 1):
+            return 2  # Corner
+        elif r == 0 or r == rows - 1 or c == 0 or c == cols - 1:
+            return 3  # Edge
+        return 4  # Middle
+    
+    # Chain reaction
+    def explode(r, c):
+        critical_mass = get_critical_mass(r, c)
+        atoms = board[r][c] % 10
+        if atoms < critical_mass:
+            return
+        
+        # Reset cell and distribute atoms
+        board[r][c] = 0
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols:
+                board[nr][nc] = (board[nr][nc] % 10) + (10 * player) + 1
+                explode(nr, nc)
+    
+    explode(row, col)
+    
+    # Check game over
+    player1_cells = sum(1 for r in range(rows) for c in range(cols) if board[r][c] > 0 and board[r][c] % 10 == 1)
+    player2_cells = sum(1 for r in range(rows) for c in range(cols) if board[r][c] > 0 and board[r][c] % 10 == 2)
+    game_over = False
+    winner = None
+    if player1_cells == 0 and player2_cells > 0:
+        game_over = True
+        winner = 2
+    elif player2_cells == 0 and player1_cells > 0:
+        game_over = True
+        winner = 1
+    
+    return board, game_over, winner
 
 # WebSocket Events
 @socketio.on('join_game')
@@ -233,89 +259,4 @@ def on_join_game(data):
 def on_game_timer(data):
     room_id = data['room_id']
     remaining_time = data['remaining_time']
-    if remaining_time <= 0:
-        with sqlite3.connect('users.db') as conn:
-            c = conn.cursor()
-            c.execute("SELECT player1_id, player2_id, player1_coins, player2_coins FROM games WHERE room_id = ?", (room_id,))
-            game = c.fetchone()
-            if game:
-                player1_id, player2_id, player1_coins, player2_coins = game
-                winner = player1_id if player1_coins > player2_coins else player2_id
-                c.execute("UPDATE games SET status = 'finished' WHERE room_id = ?", (room_id,))
-                conn.commit()
-                emit('game_end', {
-                    'winner': winner,
-                    'player1_coins': player1_coins,
-                    'player2_coins': player2_coins
-                }, room=room_id)
-                if room_id in game_rooms:
-                    del game_rooms[room_id]
-    else:
-        emit('timer_update', {'remaining_time': remaining_time}, room=room_id)
-
-# Telegram Bot Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = str(user.id)
-    username = user.username or "Unknown"
-    
-    keyboard = [
-        [InlineKeyboardButton("Play Solo", url=f"https://crypto-king-v2.onrender.com/?user_id={user_id}&username={username}")],
-        [InlineKeyboardButton("Play Blitz (30s)", callback_data=f"create_game:blitz:{user_id}:{username}")],
-        [InlineKeyboardButton("Play Rapid (60s)", callback_data=f"create_game:rapid:{user_id}:{username}")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        f"Welcome, {username}! 👑\nChoose a mode to play Crypto King!",
-        reply_markup=reply_markup
-    )
-    logger.info(f"User {user_id} ({username}) started bot")
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    data = query.data.split(':')
-    action, mode, user_id, username = data
-    
-    if action == "create_game":
-        room_id = str(uuid.uuid4())
-        duration = 60 if mode == "rapid" else 30
-        with sqlite3.connect('users.db') as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO users (user_id, username, coins, energy, total_taps, referrals, last_refill) VALUES (?, ?, 0, 100, 0, 0, ?)",
-                      (user_id, username, datetime.now().isoformat()))
-            c.execute("INSERT INTO games (room_id, player1_id, mode, start_time, duration, status) VALUES (?, ?, ?, ?, ?, 'waiting')",
-                      (room_id, user_id, mode, datetime.now().isoformat(), duration))
-            conn.commit()
-        
-        game_rooms[room_id] = {'player1_id': user_id, 'player2_id': None, 'mode': mode, 'duration': duration}
-        invite_url = f"https://crypto-king-v2.onrender.com/?user_id={user_id}&username={username}&room_id={room_id}"
-        keyboard = [[InlineKeyboardButton("Join Game", url=invite_url)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text(
-            f"{username} has started a {mode} game! Join the mining battle!",
-            reply_markup=reply_markup
-        )
-
-# Function to run Flask app with SocketIO
-def run_flask():
-    init_db()
-    logger.info("Starting Flask on 0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, use_reloader=False)
-
-# Function to run Telegram bot
-def run_bot():
-    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CallbackQueryHandler(button_callback))
-    logger.info("Starting bot polling...")
-    bot_app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    # Run Flask in a separate thread
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    # Run Telegram bot in the main thread
-    run_bot()
+    if remainin

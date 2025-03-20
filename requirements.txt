@@ -1,7 +1,6 @@
 Flask==3.0.3
 python-telegram-bot==21.5
 python-dotenv==1.0.1
-Flask-SocketIO==5.3.6  # Add this linepython-telegram-bot==20.8
-python-dotenv
-requests
-flask
+Flask-SocketIO==5.3.6
+gunicorn==22.0.0  # Add for production server
+eventlet==0.36.1  # Add for WebSocket support
