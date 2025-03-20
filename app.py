@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime
 from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
 from dotenv import load_dotenv
 import uuid
@@ -326,10 +326,10 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
         async def update_message():
             if game.status == "not_started":
                 message_text = f"{username} started a Chain Reaction game! Join now!"
-                keyboard = [[InlineKeyboardButton("Join", url=game_url)]]
+                keyboard = [[InlineKeyboardButton("Join", web_app=WebAppInfo(url=game_url))]]
             elif game.status == "in_progress":
                 message_text = f"Chain Reaction game in progress: {username} vs {game.opponent_id}"
-                keyboard = [[InlineKeyboardButton("Watch", url=game_url)]]
+                keyboard = [[InlineKeyboardButton("Watch", web_app=WebAppInfo(url=game_url))]]
             elif game.status == "finished":
                 winner = username if game.winner == 1 else game.opponent_id
                 message_text = f"Game finished! {winner} wins!"
