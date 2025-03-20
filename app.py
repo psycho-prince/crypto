@@ -324,7 +324,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Upsert user
     with sqlite3.connect('games.db') as conn:
         c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO users (user_id, username, full 🙂name, language_code) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT OR REPLACE INTO users (user_id, username, full_name, language_code) VALUES (?, ?, ?, ?)",
                   (user_id, username, f"{user.first_name} {user.last_name or ''}".strip(), language_code))
         conn.commit()
 
@@ -410,5 +410,17 @@ def run_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Initialize the bot
-    bot_app = Application.builder().token(TELEGRAM_TOKEN
+    # Initialize the bot (fixed SyntaxError here)
+    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
+    bot_app.add_handler(InlineQueryHandler(inline_query))
+    bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
+    logger.info("Starting bot polling...")
+
+    # Run the polling in the new event loop
+    loop.run_until_complete(bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True))
+
+# Start the Telegram bot in a separate thread
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
