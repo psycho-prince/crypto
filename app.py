@@ -10,7 +10,6 @@ from flask_socketio import SocketIO, join_room, emit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
-import threading
 import uuid
 import json
 
@@ -356,24 +355,11 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
         game.on("game_status_change", update_message)
 
-# Function to run Flask app with SocketIO (for local development)
-def run_flask():
-    logger.info("Starting Flask on 0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
-
-# Function to run Telegram bot
-def run_bot():
-    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
-    bot_app.add_handler(Update.handler("inline_query", inline_query))
-    bot_app.add_handler(Update.handler("chosen_inline_result", chosen_inline_result))
-    logger.info("Starting bot polling...")
-    bot_app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    # Run Flask in a separate thread
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    # Run Telegram bot in the main thread
-    run_bot()
+# Start Telegram bot polling at module level
+bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer()))
+bot_app.add_handler(Update.handler("inline_query", inline_query))
+bot_app.add_handler(Update.handler("chosen_inline_result", chosen_inline_result))
+logger.info("Starting bot polling...")
+bot_app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
