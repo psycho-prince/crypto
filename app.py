@@ -53,6 +53,9 @@ def init_db():
         conn.commit()
     logger.info("Database initialized successfully")
 
+# Call init_db() at module level to ensure it runs when gunicorn imports the app
+init_db()
+
 # Chain Reaction Game Logic
 class ChainReactionGame:
     def __init__(self, room_id, host_id, board=None):
@@ -353,9 +356,8 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
         game.on("game_status_change", update_message)
 
-# Function to run Flask app with SocketIO
+# Function to run Flask app with SocketIO (for local development)
 def run_flask():
-    init_db()  # Ensure database is initialized before starting the server
     logger.info("Starting Flask on 0.0.0.0:5000")
     socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
 
