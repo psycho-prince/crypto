@@ -30,8 +30,8 @@ app = Flask(__name__, template_folder='templates', static_folder=None)
 app.config['SECRET_KEY'] = 'your-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Game rooms dictionary
-game_rooms = {}
+# Flag to prevent multiple bot polling instances
+bot_polling_started = False
 
 # Database initialization
 def init_db():
@@ -93,8 +93,8 @@ class ChainReactionGame:
         self._process_chain_reaction(row, col, player)
 
         # Update scores and check game over
-        player1_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] % 10 == 1)
-        player2_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] % 10 == 2)
+        player1_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] // 10 == 1)
+        player2_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] // 10 == 2)
 
         if player1_cells == 0 and player2_cells > 0 and self.opponent_id is not None:
             self.status = "finished"
@@ -195,6 +195,8 @@ def index():
             c.execute("INSERT INTO users (user_id, username, full_name, language_code) VALUES (?, ?, ?, ?)",
                       (user_id, username, username, "en"))
             conn.commit()
+        else:
+            username = user[0]
 
     game_data = None
     if room_id:
@@ -203,6 +205,17 @@ def index():
             game_data = game.to_dict()
 
     return render_template('index.html', user_id=user_id, username=username, room_id=room_id, game_data=game_data)
+
+@app.route('/start_game', methods=['POST'])
+def start_game():
+    user_id = request.args.get('user_id')
+    username = request.args.get('username')
+    if not user_id or not username:
+        return jsonify({"error": "Missing user_id or username"}), 400
+
+    game = game_server.create_room(user_id)
+    game_url = f"https://crypto-king-v2.onrender.com/?user_id={user_id}&username={username}&room_id={game.room_id}"
+    return jsonify({"room_id": game.room_id, "game_url": game_url, "game_data": game.to_dict()})
 
 @app.route('/make_move', methods=['POST'])
 def make_move():
@@ -367,6 +380,12 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Function to run Telegram bot polling in a separate thread
 def run_bot():
+    global bot_polling_started
+    if bot_polling_started:
+        logger.warning("Bot polling already started, skipping duplicate instance")
+        return
+
+    bot_polling_started = True
     # Create a new event loop for this thread
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

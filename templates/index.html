@@ -40,32 +40,40 @@
     <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
         <h1 class="text-2xl font-bold text-center mb-4">Chain Reaction</h1>
         <div id="status" class="text-center mb-4 text-lg font-semibold">
-            Waiting for game to start...
+            {% if room_id %}
+                Waiting for game to start...
+            {% else %}
+                Click "Start Game" to begin!
+            {% endif %}
         </div>
-        <div id="board" class="grid grid-cols-9 gap-1 mb-4">
+        <div id="board" class="grid grid-cols-9 gap-1 mb-4 {% if not room_id %}hidden{% endif %}">
             <!-- Board will be populated dynamically -->
         </div>
         <div id="player-info" class="text-center mb-4">
-            <p>Player: <span id="username">{{ username }}</span></p>
-            <p>Room ID: <span id="room-id">{{ room_id }}</span></p>
+            <p>User ID: <span id="user-id">{{ user_id }}</span></p>
+            <p>Username: <span id="username">{{ username }}</span></p>
+            <p>Room ID: <span id="room-id">{{ room_id if room_id else 'Not yet created' }}</span></p>
         </div>
-        <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 hidden">
+        <button id="start-game-button" class="bg-green-500 text-white px-4 py-2 rounded w-full hover:bg-green-600 {% if room_id %}hidden{% endif %}">
+            Start Game
+        </button>
+        <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 {% if not room_id %}hidden{% endif %}">
             Share Game Link
         </button>
     </div>
 
     <script>
         const socket = io('https://crypto-king-v2.onrender.com');
-        const userId = '{{ user_id }}';
-        const username = '{{ username }}';
-        const roomId = '{{ room_id }}';
+        let userId = '{{ user_id }}';
+        let username = '{{ username }}';
+        let roomId = '{{ room_id }}';
         let gameData = {{ game_data | tojson | safe }};
-        let currentPlayer = null;
 
         // Initialize the board
         function initBoard() {
             const boardDiv = document.getElementById('board');
             boardDiv.innerHTML = '';
+            boardDiv.classList.remove('hidden');
             for (let row = 0; row < 6; row++) {
                 for (let col = 0; col < 9; col++) {
                     const cell = document.createElement('div');
@@ -81,6 +89,7 @@
 
         // Update cell appearance based on game state
         function updateCell(cell, row, col) {
+            if (!gameData) return;
             const value = gameData.board[row][col];
             const atoms = value % 10;
             const player = Math.floor(value / 10);
@@ -98,7 +107,7 @@
 
         // Handle cell click
         async function handleCellClick(event) {
-            if (gameData.status !== 'in_progress' || gameData.current_turn !== userId) {
+            if (!gameData || gameData.status !== 'in_progress' || gameData.current_turn !== userId) {
                 return;
             }
             const row = parseInt(event.target.dataset.row);
@@ -130,6 +139,10 @@
         // Update game status
         function updateStatus() {
             const statusDiv = document.getElementById('status');
+            if (!gameData) {
+                statusDiv.textContent = 'Click "Start Game" to begin!';
+                return;
+            }
             if (gameData.status === 'not_started') {
                 statusDiv.textContent = 'Waiting for another player...';
                 document.getElementById('share-button').classList.remove('hidden');
@@ -141,6 +154,26 @@
                 statusDiv.textContent = `Game Over! Winner: ${winner === userId ? 'You' : winner}`;
             }
         }
+
+        // Start a new game
+        document.getElementById('start-game-button').addEventListener('click', async () => {
+            const response = await fetch(`/start_game?user_id=${userId}&username=${username}`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.error) {
+                alert(result.error);
+            } else {
+                roomId = result.room_id;
+                gameData = result.game_data;
+                document.getElementById('room-id').textContent = roomId;
+                document.getElementById('start-game-button').classList.add('hidden');
+                document.getElementById('share-button').classList.remove('hidden');
+                initBoard();
+                updateStatus();
+                socket.emit('join_game', { room_id: roomId, user_id: userId });
+            }
+        });
 
         // Share game link
         document.getElementById('share-button').addEventListener('click', () => {
@@ -171,9 +204,8 @@
 
         // Initialize the game
         document.addEventListener('DOMContentLoaded', () => {
-            initBoard();
-            if (gameData) {
-                updateBoard();
+            if (roomId && gameData) {
+                initBoard();
                 updateStatus();
             }
         });
