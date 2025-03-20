@@ -1,205 +1,182 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chain Reaction</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/@telegram-apps/telegram-ui@2.1.7/dist/styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Arial', sans-serif;
-            background: url('https://img.freepik.com/free-vector/abstract-background-with-geometric-shapes_23-2148464185.jpg') no-repeat center center fixed;
-            background-size: cover;
-            color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-            -webkit-user-select: none;
-            user-select: none;
-            position: relative;
-        }
-        body::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: 0;
-        }
-        h1 {
-            font-size: 2.8em;
-            margin: 10px 0;
-            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
-            z-index: 1;
-            animation: glow 2s infinite alternate;
-        }
-        @keyframes glow {
-            from { text-shadow: 3px 3px 6px rgba(255, 215, 0, 0.5); }
-            to { text-shadow: 3px 3px 12px rgba(255, 215, 0, 1); }
-        }
-        .tg-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 15px;
-            border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            width: 90%;
-            max-width: 340px;
-            text-align: center;
-            z-index: 1;
-            margin: 10px 0;
-        }
-        .tg-card p {
-            margin: 5px 0;
-            font-size: 1.2em;
-        }
-        #game-board {
-            display: grid;
-            grid-template-columns: repeat(9, 40px);
-            grid-gap: 2px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px;
-            border-radius: 10px;
-            z-index: 1;
-        }
         .cell {
             width: 40px;
             height: 40px;
-            background: rgba(255, 255, 255, 0.2);
             display: flex;
-            align-items: center;
             justify-content: center;
-            font-size: 1.2em;
+            align-items: center;
+            border: 1px solid #ccc;
             cursor: pointer;
-            transition: background 0.3s ease, transform 0.2s ease;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
         }
         .cell.player1 {
-            background: #FF5555;
-            color: #fff;
+            background-color: #ff4d4d; /* Red for Player 1 */
+            color: white;
         }
         .cell.player2 {
-            background: #55FF55;
-            color: #000;
+            background-color: #4dffa6; /* Green for Player 2 */
+            color: black;
         }
-        .cell.explode {
-            animation: explode 0.5s ease;
+        .cell:hover {
+            background-color: #e0e0e0;
         }
-        @keyframes explode {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.5); background: #FFD700; }
-            100% { transform: scale(1); }
-        }
-        #game-status {
-            display: none;
-            margin: 10px 0;
-        }
-        footer {
-            position: absolute;
-            bottom: 10px;
-            font-size: 0.8em;
-            opacity: 0.7;
-            z-index: 1;
+        .disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
         }
     </style>
 </head>
-<body>
-    <h1>🎮 Chain Reaction</h1>
-    <div class="tg-card">
-        <p>{{ username }} (ID: {{ user_id }})</p>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-4">Chain Reaction</h1>
+        <div id="status" class="text-center mb-4 text-lg font-semibold">
+            Waiting for game to start...
+        </div>
+        <div id="board" class="grid grid-cols-9 gap-1 mb-4">
+            <!-- Board will be populated dynamically -->
+        </div>
+        <div id="player-info" class="text-center mb-4">
+            <p>Player: <span id="username">{{ username }}</span></p>
+            <p>Room ID: <span id="room-id">{{ room_id }}</span></p>
+        </div>
+        <button id="share-button" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 hidden">
+            Share Game Link
+        </button>
     </div>
-    <div class="tg-card" id="game-status">
-        <p>Player 1: <span id="player1-score">0</span> | Player 2: <span id="player2-score">0</span></p>
-        <p>Turn: <span id="current-turn"></span></p>
-    </div>
-    <div id="game-board"></div>
-    <footer>©️2025 Chain Reaction by Gagan Saini</footer>
 
     <script>
-        const userId = "{{ user_id }}";
-        const roomId = "{{ room_id }}";
-        const gameData = {{ game_data | tojson | safe }};
-        let gameActive = false;
-        let board = gameData ? gameData.board : null;
-        let currentTurn = gameData ? gameData.current_turn : null;
+        const socket = io('https://crypto-king-v2.onrender.com');
+        const userId = '{{ user_id }}';
+        const username = '{{ username }}';
+        const roomId = '{{ room_id }}';
+        let gameData = {{ game_data | tojson | safe }};
+        let currentPlayer = null;
 
-        // Initialize Socket.IO
-        const socket = io();
-
-        if (roomId) {
-            socket.emit('join_game', { room_id: roomId, user_id: userId });
-        }
-
-        socket.on('game_start', (data) => {
-            gameActive = true;
-            board = data.board;
-            currentTurn = data.current_turn;
-            document.getElementById('game-status').style.display = 'block';
-            document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
-            renderBoard();
-        });
-
-        socket.on('game_update', (data) => {
-            board = data.board;
-            currentTurn = data.current_turn;
-            const player1Score = board.flat().filter(cell => cell > 0 && cell % 10 === 1).length;
-            const player2Score = board.flat().filter(cell => cell > 0 && cell % 10 === 2).length;
-            document.getElementById('player1-score').textContent = player1Score;
-            document.getElementById('player2-score').textContent = player2Score;
-            document.getElementById('current-turn').textContent = currentTurn === userId ? "You" : "Opponent";
-            renderBoard();
-            if (data.status === "finished") {
-                gameActive = false;
-                const winner = data.winner === 1 ? (data.host_id === userId ? "You" : "Opponent") : (data.opponent_id === userId ? "You" : "Opponent");
-                window.Telegram.WebApp.showAlert(`${winner} wins! Player 1: ${player1Score} | Player 2: ${player2Score}`);
-            }
-        });
-
-        function renderBoard() {
-            const gameBoard = document.getElementById('game-board');
-            gameBoard.innerHTML = '';
+        // Initialize the board
+        function initBoard() {
+            const boardDiv = document.getElementById('board');
+            boardDiv.innerHTML = '';
             for (let row = 0; row < 6; row++) {
                 for (let col = 0; col < 9; col++) {
                     const cell = document.createElement('div');
-                    cell.classList.add('cell');
-                    const atoms = board[row][col] % 10;
-                    const player = board[row][col] > 0 ? (board[row][col] % 10 === 1 ? 1 : 2) : 0;
-                    if (player === 1) cell.classList.add('player1');
-                    if (player === 2) cell.classList.add('player2');
-                    cell.textContent = atoms > 0 ? atoms : '';
-                    cell.onclick = () => makeMove(row, col);
-                    gameBoard.appendChild(cell);
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('click', handleCellClick);
+                    updateCell(cell, row, col);
+                    boardDiv.appendChild(cell);
                 }
             }
         }
 
-        async function makeMove(row, col) {
-            if (!gameActive || currentTurn !== userId) return;
-            const response = await fetch(`/make_move?user_id=${userId}&room_id=${roomId}&row=${row}&col=${col}`, { method: 'POST' });
-            const data = await response.json();
-            if (!response.ok) {
-                alert(data.error || 'Move failed!');
+        // Update cell appearance based on game state
+        function updateCell(cell, row, col) {
+            const value = gameData.board[row][col];
+            const atoms = value % 10;
+            const player = Math.floor(value / 10);
+            cell.textContent = atoms > 0 ? atoms : '';
+            cell.className = 'cell';
+            if (player === 1) {
+                cell.classList.add('player1');
+            } else if (player === 2) {
+                cell.classList.add('player2');
             }
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+            if (gameData.status === 'in_progress' && gameData.current_turn !== userId) {
+                cell.classList.add('disabled');
             }
-            socket.emit('game_update', data);
         }
 
-        // Initial render
-        if (board) renderBoard();
-
-        // Telegram Mini App integration
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.expand();
-            window.Telegram.WebApp.enableClosingConfirmation();
-            window.Telegram.WebApp.setHeaderColor('#1e3c72');
+        // Handle cell click
+        async function handleCellClick(event) {
+            if (gameData.status !== 'in_progress' || gameData.current_turn !== userId) {
+                return;
+            }
+            const row = parseInt(event.target.dataset.row);
+            const col = parseInt(event.target.dataset.col);
+            const response = await fetch(`/make_move?user_id=${userId}&room_id=${roomId}&row=${row}&col=${col}`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.error) {
+                alert(result.error);
+            } else {
+                gameData = result;
+                socket.emit('game_update', { room_id: roomId, game_data: gameData });
+                updateBoard();
+                updateStatus();
+            }
         }
+
+        // Update the entire board
+        function updateBoard() {
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                updateCell(cell, row, col);
+            });
+        }
+
+        // Update game status
+        function updateStatus() {
+            const statusDiv = document.getElementById('status');
+            if (gameData.status === 'not_started') {
+                statusDiv.textContent = 'Waiting for another player...';
+                document.getElementById('share-button').classList.remove('hidden');
+            } else if (gameData.status === 'in_progress') {
+                const turn = gameData.current_turn === userId ? 'Your Turn' : 'Opponent\'s Turn';
+                statusDiv.textContent = `Game in Progress - ${turn}`;
+            } else if (gameData.status === 'finished') {
+                const winner = gameData.winner === 1 ? gameData.host_id : gameData.opponent_id;
+                statusDiv.textContent = `Game Over! Winner: ${winner === userId ? 'You' : winner}`;
+            }
+        }
+
+        // Share game link
+        document.getElementById('share-button').addEventListener('click', () => {
+            const gameUrl = `https://crypto-king-v2.onrender.com/?user_id=${userId}&username=${username}&room_id=${roomId}`;
+            navigator.clipboard.writeText(gameUrl).then(() => {
+                alert('Game link copied to clipboard!');
+            });
+        });
+
+        // Socket.IO events
+        socket.on('connect', () => {
+            if (roomId) {
+                socket.emit('join_game', { room_id: roomId, user_id: userId });
+            }
+        });
+
+        socket.on('game_start', (data) => {
+            gameData = data;
+            updateBoard();
+            updateStatus();
+        });
+
+        socket.on('game_update', (data) => {
+            gameData = data.game_data;
+            updateBoard();
+            updateStatus();
+        });
+
+        // Initialize the game
+        document.addEventListener('DOMContentLoaded', () => {
+            initBoard();
+            if (gameData) {
+                updateBoard();
+                updateStatus();
+            }
+        });
     </script>
 </body>
 </html>

@@ -7,6 +7,7 @@ import logging
 import threading
 import asyncio
 from datetime import datetime
+import datetime as dt
 from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -19,8 +20,9 @@ import json
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Set up logging
+# Set up logging with GMT+5:30 timezone
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.Formatter.converter = lambda *args: dt.datetime.now(dt.timezone(dt.timedelta(hours=5, minutes=30))).timetuple()
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app and SocketIO
@@ -94,10 +96,10 @@ class ChainReactionGame:
         player1_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] % 10 == 1)
         player2_cells = sum(1 for r in range(6) for c in range(9) if self.board[r][c] > 0 and self.board[r][c] % 10 == 2)
 
-        if player1_cells == 0 and player2_cells > 0:
+        if player1_cells == 0 and player2_cells > 0 and self.opponent_id is not None:
             self.status = "finished"
             self.winner = 2
-        elif player2_cells == 0 and player1_cells > 0:
+        elif player2_cells == 0 and player1_cells > 0 and self.opponent_id is not None:
             self.status = "finished"
             self.winner = 1
 
@@ -346,16 +348,22 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 return
 
-            await context.bot.edit_message_text(
-                chat_id=None,
-                message_id=inline_message_id,
-                inline_message_id=inline_message_id,
-                text=message_text,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=None,
+                    message_id=inline_message_id,
+                    inline_message_id=inline_message_id,
+                    text=message_text,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            except Exception as e:
+                logger.error(f"Failed to update inline message: {e}")
 
-        game.on("game_status_change", update_message)
+        # Call update_message immediately to show the "Join" button
+        await update_message()
+        # Also set up the callback for future status changes
+        game.on("game_status_change", lambda: asyncio.create_task(update_message()))
 
 # Function to run Telegram bot polling in a separate thread
 def run_bot():
