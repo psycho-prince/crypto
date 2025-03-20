@@ -27,6 +27,14 @@
             background-color: #4d79ff; /* Blue for Player 2 */
             color: white;
         }
+        .cell.player3 {
+            background-color: #4dff4d; /* Green for Player 3 */
+            color: white;
+        }
+        .cell.player4 {
+            background-color: #ffff4d; /* Yellow for Player 4 */
+            color: black;
+        }
         .cell:hover {
             background-color: #e0e0e0;
         }
@@ -45,30 +53,28 @@
             background-color: #f0f0f0;
             font-size: 20px;
         }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-r from-blue-100 to-purple-100 flex flex-col items-center justify-center min-h-screen">
     <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
         <h1 class="text-3xl font-bold text-center mb-4 text-blue-600">Chain Reaction</h1>
-        <div class="flex justify-between mb-4">
-            <div class="flex items-center">
-                <div class="avatar-frame mr-2">{{ username[0] | upper }}</div>
-                <div>
-                    <p class="font-semibold">{{ username }}</p>
-                    <p class="text-sm text-gray-600">Player 1</p>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <div class="avatar-frame mr-2">{{ game_data.opponent_id[0] | upper if game_data and game_data.opponent_id else '?' }}</div>
-                <div>
-                    <p class="font-semibold">{{ game_data.opponent_id if game_data and game_data.opponent_id else 'Waiting...' }}</p>
-                    <p class="text-sm text-gray-600">Player 2</p>
-                </div>
-            </div>
+        <div id="players" class="flex flex-wrap justify-between mb-4">
+            <!-- Players will be populated dynamically -->
         </div>
         <div id="status" class="text-center mb-4 text-lg font-semibold text-gray-800">
             {% if room_id %}
-                Waiting for another player...
+                Waiting for players...
             {% else %}
                 Click "Start Game" to begin!
             {% endif %}
@@ -93,6 +99,7 @@
             </div>
         </div>
     </div>
+    <div id="toast" class="toast"></div>
 
     <script>
         const socket = io('https://crypto-king-v2.onrender.com');
@@ -109,6 +116,37 @@
             leaderboardDiv.innerHTML = leaders.map((leader, index) => `
                 <p>${index + 1}. ${leader.username}: ${leader.wins} wins</p>
             `).join('');
+        }
+
+        // Update players list
+        function updatePlayers() {
+            const playersDiv = document.getElementById('players');
+            playersDiv.innerHTML = '';
+            if (!gameData) return;
+            gameData.usernames.forEach((name, index) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'flex items-center mb-2';
+                playerDiv.innerHTML = `
+                    <div class="avatar-frame mr-2">${name[0].toUpperCase()}</div>
+                    <div>
+                        <p class="font-semibold">${name}</p>
+                        <p class="text-sm text-gray-600">Player ${index + 1}</p>
+                    </div>
+                `;
+                playersDiv.appendChild(playerDiv);
+            });
+            for (let i = gameData.usernames.length; i < 4; i++) {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'flex items-center mb-2';
+                playerDiv.innerHTML = `
+                    <div class="avatar-frame mr-2">?</div>
+                    <div>
+                        <p class="font-semibold">Waiting...</p>
+                        <p class="text-sm text-gray-600">Player ${i + 1}</p>
+                    </div>
+                `;
+                playersDiv.appendChild(playerDiv);
+            }
         }
 
         // Initialize the board
@@ -137,10 +175,8 @@
             const player = Math.floor(value / 10);
             cell.textContent = atoms > 0 ? atoms : '';
             cell.className = 'cell';
-            if (player === 1) {
-                cell.classList.add('player1');
-            } else if (player === 2) {
-                cell.classList.add('player2');
+            if (player > 0) {
+                cell.classList.add(`player${player}`);
             }
             if (gameData.status === 'in_progress' && gameData.current_turn !== userId) {
                 cell.classList.add('disabled');
@@ -165,7 +201,7 @@
                 socket.emit('game_update', { room_id: roomId, game_data: gameData });
                 updateBoard();
                 updateStatus();
-                fetchLeaderboard(); // Update leaderboard after a game ends
+                fetchLeaderboard();
             }
         }
 
@@ -187,15 +223,27 @@
                 return;
             }
             if (gameData.status === 'not_started') {
-                statusDiv.textContent = 'Waiting for another player...';
+                statusDiv.textContent = 'Waiting for players...';
                 document.getElementById('share-button').classList.remove('hidden');
             } else if (gameData.status === 'in_progress') {
-                const turn = gameData.current_turn === userId ? 'Your Turn' : 'Opponent\'s Turn';
+                const turnIdx = gameData.players.indexOf(gameData.current_turn);
+                const turnName = gameData.usernames[turnIdx];
+                const turn = gameData.current_turn === userId ? 'Your Turn' : `${turnName}'s Turn`;
                 statusDiv.textContent = `Game in Progress - ${turn}`;
             } else if (gameData.status === 'finished') {
-                const winner = gameData.winner === 1 ? gameData.host_id : gameData.opponent_id;
-                statusDiv.textContent = `Game Over! Winner: ${winner === userId ? 'You' : winner}`;
+                const winnerName = gameData.usernames[gameData.winner - 1];
+                statusDiv.textContent = `Game Over! Winner: ${winnerName}`;
             }
+        }
+
+        // Show toast message
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
         }
 
         // Start a new game
@@ -213,8 +261,9 @@
                 document.getElementById('start-game-button').classList.add('hidden');
                 document.getElementById('share-button').classList.remove('hidden');
                 initBoard();
+                updatePlayers();
                 updateStatus();
-                socket.emit('join_game', { room_id: roomId, user_id: userId });
+                socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
             }
         });
 
@@ -229,23 +278,25 @@
         // Socket.IO events
         socket.on('connect', () => {
             if (roomId) {
-                socket.emit('join_game', { room_id: roomId, user_id: userId });
+                socket.emit('join_game', { room_id: roomId, user_id: userId, username: username });
             }
         });
 
         socket.on('game_start', (data) => {
             gameData = data;
+            updatePlayers();
             updateBoard();
             updateStatus();
-            // Refresh player info
-            document.querySelector('.flex.items-center:last-child .font-semibold').textContent = gameData.opponent_id || 'Waiting...';
-            document.querySelector('.flex.items-center:last-child .avatar-frame').textContent = gameData.opponent_id ? gameData.opponent_id[0].toUpperCase() : '?';
         });
 
         socket.on('game_update', (data) => {
             gameData = data.game_data;
             updateBoard();
             updateStatus();
+        });
+
+        socket.on('player_joined', (data) => {
+            showToast(`${data.username} joined the game!`);
         });
 
         socket.on('join_error', (data) => {
@@ -257,6 +308,7 @@
             fetchLeaderboard();
             if (roomId && gameData) {
                 initBoard();
+                updatePlayers();
                 updateStatus();
             }
         });
