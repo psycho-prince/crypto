@@ -3,12 +3,15 @@
 <head>
     <title>Crypto King</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Telegram UI CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/@telegram-apps/telegram-ui@2.1.7/dist/styles.css">
     <style>
         body {
             margin: 0;
             padding: 0;
             font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            background: url('https://img.freepik.com/free-vector/royal-throne-room-with-red-carpet_23-2148464185.jpg') no-repeat center center fixed;
+            background-size: cover;
             color: #fff;
             display: flex;
             flex-direction: column;
@@ -17,86 +20,115 @@
             overflow: hidden;
             -webkit-user-select: none;
             user-select: none;
+            position: relative;
+        }
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4); /* Dark overlay for contrast */
+            z-index: 0;
         }
         h1 {
-            font-size: 2.5em;
+            font-size: 2.8em;
             margin: 10px 0;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+            z-index: 1;
+            animation: glow 2s infinite alternate;
         }
-        #user-info {
-            font-size: 1.2em;
-            margin-bottom: 10px;
-            text-align: center;
+        @keyframes glow {
+            from { text-shadow: 3px 3px 6px rgba(255, 215, 0, 0.5); }
+            to { text-shadow: 3px 3px 12px rgba(255, 215, 0, 1); }
         }
-        #stats {
-            margin: 10px 0;
-            text-align: center;
+        .tg-card {
             background: rgba(255, 255, 255, 0.1);
-            padding: 10px;
-            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             width: 90%;
-            max-width: 300px;
+            max-width: 340px;
+            text-align: center;
+            z-index: 1;
+            margin: 10px 0;
         }
-        #stats p {
+        .tg-card p {
             margin: 5px 0;
-            font-size: 1.1em;
+            font-size: 1.2em;
         }
         #energy-bar {
             width: 100%;
-            height: 10px;
-            background: #444;
-            border-radius: 5px;
+            height: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 7px;
             overflow: hidden;
             margin: 5px 0;
         }
         #energy-fill {
             height: 100%;
-            background: #00ff00;
+            background: linear-gradient(90deg, #FFD700, #FFA500);
             transition: width 0.3s ease;
+            box-shadow: 0 0 12px #FFD700;
         }
         #coin-container {
             position: relative;
-            width: 150px;
-            height: 150px;
+            width: 200px;
+            height: 200px;
             margin: 20px 0;
             cursor: pointer;
+            z-index: 1;
         }
         #coin {
             width: 100%;
             height: 100%;
-            background: url('https://img.icons8.com/emoji/96/crown-emoji.png') no-repeat center;
+            background: url('https://img.icons8.com/emoji/96/king.png') no-repeat center;
             background-size: contain;
-            transition: transform 0.2s ease;
+            transition: transform 0.2s ease, filter 0.3s ease;
+            filter: drop-shadow(0 0 15px #FFD700);
         }
         #coin.tapped {
-            transform: scale(1.2) rotate(10deg);
+            transform: scale(1.4) rotate(20deg);
+            filter: drop-shadow(0 0 25px #FFD700) brightness(1.2);
         }
         #tap-effect {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 2em;
+            font-size: 3em;
             color: #FFD700;
             opacity: 0;
-            transition: opacity 0.5s ease, transform 0.5s ease;
+            transition: opacity 0.6s ease, transform 0.6s ease;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
         }
         #tap-effect.show {
             opacity: 1;
-            transform: translate(-50%, -70%);
+            transform: translate(-50%, -120%);
         }
-        #leaderboard {
-            margin: 10px 0;
-            width: 90%;
-            max-width: 300px;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 10px;
-            border-radius: 10px;
-            text-align: center;
+        #particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
         }
-        #leaderboard h3 {
-            margin: 5px 0;
-            font-size: 1.2em;
+        .particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #FFD700;
+            border-radius: 50%;
+            opacity: 0.9;
+            animation: particleFade 1.2s ease-out forwards;
+        }
+        @keyframes particleFade {
+            0% { opacity: 0.9; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0) translateY(-60px); }
         }
         #leaderboard ul {
             list-style: none;
@@ -104,46 +136,46 @@
             margin: 0;
         }
         #leaderboard li {
-            margin: 5px 0;
-            font-size: 1em;
-        }
-        .button {
-            padding: 10px 30px;
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
             font-size: 1.1em;
-            color: #fff;
-            background: #FFD700;
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-            cursor: pointer;
-            transition: background 0.3s ease, transform 0.1s ease;
+        }
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid #FFD700;
+        }
+        .tg-button {
+            padding: 12px 35px;
+            font-size: 1.2em;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.1s ease, box-shadow 0.3s ease;
             margin: 5px;
         }
-        .button:hover {
-            background: #FFC107;
-        }
-        .button:active {
+        .tg-button:active {
             transform: scale(0.95);
-        }
-        .button:disabled {
-            background: #666;
-            cursor: not-allowed;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         footer {
             position: absolute;
             bottom: 10px;
             font-size: 0.8em;
             opacity: 0.7;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
     <h1>👑 Crypto King</h1>
-    <div id="user-info">
+    <div class="tg-card">
         <p>{{ username }} (ID: {{ user_id }})</p>
         <p>Total Taps: <span id="total-taps">{{ total_taps }}</span> | Referrals: <span id="referrals">{{ referrals }}</span></p>
     </div>
-    <div id="stats">
+    <div class="tg-card">
         <p>Coins: <span id="coins">{{ coins }}</span></p>
         <p>Energy: <span id="energy">{{ energy }}</span></p>
         <div id="energy-bar">
@@ -153,18 +185,22 @@
     <div id="coin-container" onclick="mineCoins()">
         <div id="coin"></div>
         <div id="tap-effect">+1</div>
+        <div id="particles"></div>
     </div>
-    <div id="leaderboard">
+    <div class="tg-card" id="leaderboard">
         <h3>🏆 Leaderboard</h3>
         <ul>
             {% for user in leaderboard %}
-                <li>{{ user[0] }}: {{ user[1] }} Coins</li>
+                <li>
+                    <img src="https://ui-avatars.com/api/?name={{ user[0] }}&background=FFD700&color=000" class="avatar" alt="Avatar">
+                    {{ user[0] }}: {{ user[1] }} Coins
+                </li>
             {% endfor %}
         </ul>
     </div>
     <div>
-        <button class="button" onclick="mineCoins()" id="mine-btn">Tap to Mine</button>
-        <button class="button" onclick="shareBot()">Share & Earn</button>
+        <button class="tg-button tg-main-button" onclick="mineCoins()" id="mine-btn">Tap to Mine</button>
+        <button class="tg-button tg-secondary-button" onclick="shareBot()">Share & Earn</button>
     </div>
     <footer>©️2025 Crypto King by Gagan Saini</footer>
 
@@ -174,15 +210,28 @@
             const btn = document.getElementById('mine-btn');
             const coin = document.getElementById('coin');
             const tapEffect = document.getElementById('tap-effect');
+            const particlesContainer = document.getElementById('particles');
             btn.disabled = true;
 
             // Trigger tap animation
             coin.classList.add('tapped');
             tapEffect.classList.add('show');
 
-            // Haptic feedback (if supported by Telegram)
+            // Create particle effects
+            for (let i = 0; i < 12; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+                const angle = Math.random() * 360;
+                const distance = Math.random() * 60 + 30;
+                particle.style.left = '50%';
+                particle.style.top = '50%';
+                particle.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(-${distance}px)`;
+                particlesContainer.appendChild(particle);
+            }
+
+            // Haptic feedback
             if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
             }
 
             const response = await fetch(`/mine?user_id=${userId}`, { method: 'POST' });
@@ -205,11 +254,9 @@
             const shareUrl = `https://t.me/<YourBotName>?start=${userId}`;
             const shareText = `Join me on Crypto King and start mining coins! 👑 Tap to earn: ${shareUrl}`;
 
-            // Share via Telegram
             if (window.Telegram && window.Telegram.WebApp) {
                 window.Telegram.WebApp.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`);
                 
-                // Award referral bonus
                 const response = await fetch(`/refer?user_id=${userId}`, { method: 'POST' });
                 const data = await response.json();
                 if (response.ok) {
@@ -224,9 +271,9 @@
 
         // Telegram Mini App integration
         if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.expand(); // Make the app full-screen
-            window.Telegram.WebApp.enableClosingConfirmation(); // Show confirmation on close
-            window.Telegram.WebApp.setHeaderColor('#1e3c72'); // Match Telegram theme
+            window.Telegram.WebApp.expand();
+            window.Telegram.WebApp.enableClosingConfirmation();
+            window.Telegram.WebApp.setHeaderColor('#1e3c72');
         }
     </script>
 </body>
