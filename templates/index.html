@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- Telegram UI CSS -->
     <link rel="stylesheet" href="https://unpkg.com/@telegram-apps/telegram-ui@2.1.7/dist/styles.css">
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -29,7 +31,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.4); /* Dark overlay for contrast */
+            background: rgba(0, 0, 0, 0.4);
             z-index: 0;
         }
         h1 {
@@ -160,6 +162,15 @@
             transform: scale(0.95);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
+        #game-timer {
+            font-size: 1.5em;
+            margin: 10px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        #opponent-stats {
+            display: none;
+            margin: 10px 0;
+        }
         footer {
             position: absolute;
             bottom: 10px;
@@ -181,6 +192,10 @@
         <div id="energy-bar">
             <div id="energy-fill" style="width: {{ energy }}%;"></div>
         </div>
+    </div>
+    <div id="game-timer"></div>
+    <div class="tg-card" id="opponent-stats">
+        <p>You: <span id="player1-coins">0</span> | Opponent: <span id="player2-coins">0</span></p>
     </div>
     <div id="coin-container" onclick="mineCoins()">
         <div id="coin"></div>
@@ -205,8 +220,60 @@
     <footer>©️2025 Crypto King by Gagan Saini</footer>
 
     <script>
+        const userId = "{{ user_id }}";
+        const roomId = "{{ room_id }}";
+        const gameData = {{ game_data | tojson | safe }};
+        let gameActive = false;
+        let remainingTime = gameData ? gameData.duration : 0;
+
+        // Initialize Socket.IO
+        const socket = io();
+
+        if (roomId) {
+            socket.emit('join_game', { room_id: roomId, user_id: userId });
+        }
+
+        socket.on('game_start', (data) => {
+            gameActive = true;
+            remainingTime = data.duration;
+            document.getElementById('opponent-stats').style.display = 'block';
+            startTimer();
+        });
+
+        socket.on('game_update', (data) => {
+            document.getElementById('player1-coins').textContent = data.player1_coins;
+            document.getElementById('player2-coins').textContent = data.player2_coins;
+        });
+
+        socket.on('timer_update', (data) => {
+            remainingTime = data.remaining_time;
+            document.getElementById('game-timer').textContent = `Time: ${Math.ceil(remainingTime)}s`;
+        });
+
+        socket.on('game_end', (data) => {
+            gameActive = false;
+            const winner = data.winner === userId ? "You" : "Opponent";
+            window.Telegram.WebApp.showAlert(`${winner} wins! You: ${data.player1_coins} | Opponent: ${data.player2_coins}`);
+            document.getElementById('game-timer').textContent = "Game Over";
+            document.getElementById('mine-btn').disabled = true;
+        });
+
+        function startTimer() {
+            const timerInterval = setInterval(() => {
+                if (!gameActive) {
+                    clearInterval(timerInterval);
+                    return;
+                }
+                remainingTime -= 1;
+                socket.emit('game_timer', { room_id: roomId, remaining_time: remainingTime });
+                if (remainingTime <= 0) {
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
+        }
+
         async function mineCoins() {
-            const userId = "{{ user_id }}";
+            if (!gameActive && roomId) return;
             const btn = document.getElementById('mine-btn');
             const coin = document.getElementById('coin');
             const tapEffect = document.getElementById('tap-effect');
@@ -234,7 +301,7 @@
                 window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
             }
 
-            const response = await fetch(`/mine?user_id=${userId}`, { method: 'POST' });
+            const response = await fetch(`/mine?user_id=${userId}${roomId ? '&room_id=' + roomId : ''}`, { method: 'POST' });
             const data = await response.json();
 
             if (response.ok) {
