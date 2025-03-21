@@ -1,3 +1,10 @@
+<<<<<<< HEAD
 python-telegram-bot==20.0
 requests==2.31.0
 python-dotenv==1.0.0
+=======
+TELEGRAM_TOKEN==7332706769:AAHC0u5XMHOrLukqkwGw9wSNv-L5UIjH--U
+WEBHOOK_URL=https://chain-reaction-bot.onrender.com
+BACKEND_URL=http://localhost:5000
+FRONTEND_URL=http://localhost:3000
+>>>>>>> 7d9deb78feb556170023502f8c0977b726bbe17c
