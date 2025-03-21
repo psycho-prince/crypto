@@ -1,11 +1,12 @@
 import os
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes, ApplicationBuilder
 from telegram.error import TelegramError
 from dotenv import load_dotenv
 import requests
 import asyncio
+from aiohttp import web
 
 # Load environment variables
 load_dotenv()
@@ -13,6 +14,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 BACKEND_URL = os.getenv("BACKEND_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
+PORT = int(os.getenv("PORT", 8443))  # Default to 8443 if PORT is not set
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +26,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Initialize the bot
+bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -123,12 +128,18 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         logger.info(f"Game {room_id} created for user {user_id} ({username})")
 
-# Initialize the bot
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+# Add handlers
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("help", help_command))
 bot_app.add_handler(InlineQueryHandler(inline_query))
 bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
+
+# Webhook handler for Render
+async def webhook(request):
+    update = await request.json()
+    update = Update.de_json(update, bot_app.bot)
+    await bot_app.process_update(update)
+    return web.Response(text="OK")
 
 async def set_webhook():
     try:
@@ -138,10 +149,19 @@ async def set_webhook():
         logger.error(f"Failed to set webhook: {e}")
 
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     if os.getenv("RENDER"):
+        # Run in webhook mode on Render
+        app = web.Application()
+        app.router.add_post('/webhook', webhook)
+        
+        # Initialize the bot and set the webhook
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(bot_app.initialize())
         loop.run_until_complete(set_webhook())
-        bot_app.run_polling()  # Fallback for Render
+        
+        # Start the web server
+        logger.info(f"Starting webhook server on port {PORT}")
+        web.run_app(app, port=PORT)
     else:
+        # Run in polling mode locally
         bot_app.run_polling()
