@@ -11,6 +11,7 @@ from flask import Flask, request, render_template, jsonify
 from flask_socketio import SocketIO, join_room, emit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
+from telegram.error import TelegramError
 from dotenv import load_dotenv
 import uuid
 import json
@@ -19,14 +20,13 @@ from functools import wraps
 import time
 import signal
 import sys
-import sqlite3
 from sqlite3 import Error
 import retrying
 
 # Load environment variables
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = "https://crypto-king-v2.onrender.com/webhook"  # Update with your Render URL
+WEBHOOK_URL = "https://crypto-king-v2.onrender.com/webhook"
 
 # Set up logging with GMT+5:30 timezone
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,7 +42,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=10, ping_interva
 RATE_LIMIT = 1  # 1 request per second per user
 last_request = {}
 
-# Database connection pool (simple implementation for SQLite)
+# Database connection pool
 class DatabasePool:
     def __init__(self, db_file):
         self.db_file = db_file
@@ -112,7 +112,7 @@ def rate_limit(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Chain Reaction Game Logic (Updated for Multiple Players)
+# Chain Reaction Game Logic
 class ChainReactionGame:
     def __init__(self, room_id, host_id, host_username, board=None):
         self.room_id = room_id
@@ -122,8 +122,8 @@ class ChainReactionGame:
         self.current_turn = host_id
         self.status = "not_started"
         self.winner = None
-        self.callbacks = {"game_status_change": [], "destroy": []}
-        self.max_players = 4
+        self.callbacks = {"game_status_change": [], "destroy": [], "chain_reaction": []}
+        self.max_players = 8  # Increased to match BuddyMattEnt game
 
     def add_player(self, player_id, username):
         if len(self.players) >= self.max_players or player_id in self.players:
@@ -144,7 +144,7 @@ class ChainReactionGame:
             return False
 
         self.board[row][col] = (self.board[row][col] % 10) + (10 * player) + 1
-        self._process_chain_reaction(row, col, player)
+        chain_reactions = self._process_chain_reaction(row, col, player)
 
         scores = [0] * len(self.players)
         for p in range(len(self.players)):
@@ -165,6 +165,8 @@ class ChainReactionGame:
             self.current_turn = self.players[next_idx]
 
         self._trigger_callback("game_status_change")
+        if chain_reactions:
+            self._trigger_callback("chain_reaction", chain_reactions)
         return True
 
     def _update_wins(self, winner_id):
@@ -179,6 +181,7 @@ class ChainReactionGame:
             conn.close()
 
     def _process_chain_reaction(self, row, col, player):
+        reactions = []
         rows, cols = 6, 9
         critical_mass = 4
         if (row == 0 or row == rows - 1) and (col == 0 or col == cols - 1):
@@ -188,22 +191,25 @@ class ChainReactionGame:
 
         atoms = self.board[row][col] % 10
         if atoms < critical_mass:
-            return
+            return reactions
 
+        reactions.append({"row": row, "col": col, "player": player})
         self.board[row][col] = 0
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = row + dr, col + dc
             if 0 <= nr < rows and 0 <= nc < cols:
                 self.board[nr][nc] = (self.board[nr][nc] % 10) + (10 * player) + 1
-                self._process_chain_reaction(nr, nc, player)
+                sub_reactions = self._process_chain_reaction(nr, nc, player)
+                reactions.extend(sub_reactions)
+        return reactions
 
     def on(self, event, callback):
         if event in self.callbacks:
             self.callbacks[event].append(callback)
 
-    def _trigger_callback(self, event):
+    def _trigger_callback(self, event, data=None):
         for callback in self.callbacks.get(event, []):
-            callback()
+            callback(data)
 
     def to_dict(self):
         return {
@@ -353,6 +359,7 @@ def make_move():
             return jsonify({"error": "Database error"}), 500
         finally:
             conn.close()
+        socketio.emit('game_update', {"room_id": room_id, "game_data": game.to_dict()}, room=room_id)
         return jsonify(game.to_dict())
     else:
         return jsonify({"error": "Invalid move"}), 400
@@ -404,9 +411,41 @@ def on_join_game(data):
     room_id = data['room_id']
     user_id = data['user_id']
     username = data['username']
+    logger.info(f"User {user_id} ({username}) attempting to join room {room_id}")
     join_room(room_id)
 
     game = game_server.get_room(room_id)
+    if not game:
+        # Try to load from database
+        conn = db_pool.connect()
+        try:
+            c = conn.cursor()
+            c.execute("SELECT * FROM games WHERE room_id = ?", (room_id,))
+            game_row = c.fetchone()
+            if game_row:
+                game = ChainReactionGame(
+                    room_id=game_row[0],
+                    host_id=json.loads(game_row[1])[0],
+                    host_username=json.loads(game_row[2])[0],
+                    board=json.loads(game_row[3])
+                )
+                game.players = json.loads(game_row[1])
+                game.usernames = json.loads(game_row[2])
+                game.current_turn = game_row[4]
+                game.status = game_row[5]
+                game.winner = game_row[7]
+                game_server.rooms[room_id] = game
+            else:
+                emit('join_error', {"error": "Game not found"}, to=user_id)
+                logger.error(f"Game {room_id} not found in database")
+                return
+        except Exception as e:
+            logger.error(f"Failed to load game {room_id} from database: {e}")
+            emit('join_error', {"error": "Database error"}, to=user_id)
+            return
+        finally:
+            conn.close()
+
     if game and game.add_player(user_id, username):
         conn = db_pool.connect()
         try:
@@ -424,13 +463,19 @@ def on_join_game(data):
 
         emit('game_start', game.to_dict(), room=room_id)
         emit('player_joined', {"username": username}, room=room_id)
+        logger.info(f"User {user_id} ({username}) successfully joined room {room_id}")
     else:
         emit('join_error', {"error": "Unable to join game"}, to=user_id)
+        logger.error(f"User {user_id} ({username}) failed to join room {room_id}")
 
 @socketio.on('game_update')
 def on_game_update(data):
     room_id = data['room_id']
     emit('game_update', data, room=room_id)
+
+@socketio.on('chain_reaction')
+def on_chain_reaction(data):
+    emit('chain_reaction', data, room=data['room_id'])
 
 @socketio.on('connect')
 def on_connect():
@@ -510,6 +555,22 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, cache_time=0)
 
+@retrying.retry(stop_max_attempt_number=3, wait_fixed=2000)
+async def update_inline_message(context, inline_message_id, message_text, reply_markup):
+    try:
+        await context.bot.edit_message_text(
+            chat_id=None,
+            message_id=inline_message_id,
+            inline_message_id=inline_message_id,
+            text=message_text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+        logger.info(f"Updated inline message {inline_message_id} with text: {message_text}")
+    except TelegramError as e:
+        logger.error(f"Failed to update inline message {inline_message_id}: {e}")
+        raise
+
 async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.chosen_inline_result.from_user
     user_id = str(user.id)
@@ -520,12 +581,11 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
     if result_id == "create_game":
         game = game_server.create_room(user_id, username)
         if not game:
-            await context.bot.edit_message_text(
-                chat_id=None,
-                message_id=inline_message_id,
-                inline_message_id=inline_message_id,
-                text="Failed to create game. Please try again.",
-                parse_mode="Markdown"
+            await update_inline_message(
+                context,
+                inline_message_id,
+                "Failed to create game. Please try again.",
+                InlineKeyboardMarkup([])
             )
             return
 
@@ -535,17 +595,15 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
         message_text = f"{username} started a Chain Reaction game! Join now!"
         keyboard = [[InlineKeyboardButton("Join", web_app=WebAppInfo(url=game_url))]]
         try:
-            await context.bot.edit_message_text(
-                chat_id=None,
-                message_id=inline_message_id,
-                inline_message_id=inline_message_id,
-                text=message_text,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+            await update_inline_message(
+                context,
+                inline_message_id,
+                message_text,
+                InlineKeyboardMarkup(keyboard)
             )
-            logger.info(f"Updated inline message {inline_message_id} with Join button")
         except Exception as e:
-            logger.error(f"Failed to update inline message {inline_message_id}: {e}")
+            logger.error(f"Failed to update inline message {inline_message_id} after retries: {e}")
+            return
 
         async def update_message():
             if game.status == "not_started":
@@ -571,17 +629,14 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
                 return
 
             try:
-                await context.bot.edit_message_text(
-                    chat_id=None,
-                    message_id=inline_message_id,
-                    inline_message_id=inline_message_id,
-                    text=message_text,
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                await update_inline_message(
+                    context,
+                    inline_message_id,
+                    message_text,
+                    InlineKeyboardMarkup(keyboard)
                 )
-                logger.info(f"Updated inline message {inline_message_id} for status {game.status}")
             except Exception as e:
-                logger.error(f"Failed to update inline message {inline_message_id}: {e}")
+                logger.error(f"Failed to update inline message {inline_message_id} for status {game.status}: {e}")
 
         game.on("game_status_change", lambda: asyncio.create_task(update_message()))
 
@@ -598,17 +653,16 @@ async def set_webhook_with_retry():
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
     logger.info(f"Webhook set to {WEBHOOK_URL}")
 
-# Set webhook on startup
-@app.before_first_request
-def set_webhook():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+# Set webhook during app initialization
+async def initialize_webhook():
     try:
-        loop.run_until_complete(set_webhook_with_retry())
+        await set_webhook_with_retry()
     except Exception as e:
         logger.error(f"Failed to set webhook after retries: {e}")
-    finally:
-        loop.close()
+
+# Run webhook setup
+loop = asyncio.get_event_loop()
+loop.run_until_complete(initialize_webhook())
 
 # Graceful shutdown
 def shutdown_handler(signum, frame):
