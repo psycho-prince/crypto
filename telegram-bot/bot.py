@@ -7,13 +7,22 @@ from dotenv import load_dotenv
 import requests
 import asyncio
 
+# Load environment variables
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 BACKEND_URL = os.getenv("BACKEND_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -31,6 +40,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
     logger.info(f"User {user_id} ({username}) started bot")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = str(user.id)
+    username = user.username or user.first_name
+
+    help_text = (
+        "🎮 *Chain Reaction Bot Help*\n\n"
+        "Commands:\n"
+        "/start - Start a new game\n"
+        "/help - Show this help message\n\n"
+        "How to Play:\n"
+        "- Use /start to begin.\n"
+        "- Click 'Play Chain Reaction' to create a game.\n"
+        "- Share the link with friends to join (2-8 players).\n"
+        "- Take turns placing atoms on the 6x9 grid.\n"
+        "- Cause chain reactions to capture the board!\n"
+        "- The last player standing wins."
+    )
+    await update.message.reply_text(help_text, parse_mode="Markdown")
+    logger.info(f"User {user_id} ({username}) requested help")
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.inline_query.from_user
@@ -54,6 +84,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.inline_query.answer(results, cache_time=0)
+    logger.info(f"User {user_id} ({username}) initiated inline query")
 
 async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.chosen_inline_result.from_user
@@ -64,11 +95,15 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if result_id == "create_game":
         try:
-            response = requests.post(f"{BACKEND_URL}/create_game", json={"userId": user_id, "username": username})
+            response = requests.post(
+                f"{BACKEND_URL}/create_game",
+                json={"userId": user_id, "username": username},
+                timeout=10
+            )
             response.raise_for_status()
             data = response.json()
             room_id = data["roomId"]
-        except Exception as e:
+        except requests.RequestException as e:
             logger.error(f"Failed to create game for user {user_id}: {e}")
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
@@ -86,20 +121,27 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+        logger.info(f"Game {room_id} created for user {user_id} ({username})")
 
+# Initialize the bot
 bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("help", help_command))
 bot_app.add_handler(InlineQueryHandler(inline_query))
 bot_app.add_handler(ChosenInlineResultHandler(chosen_inline_result))
 
-# Comment out webhook setup for local testing
-# async def set_webhook():
-#     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
-#     logger.info(f"Webhook set to {WEBHOOK_URL}")
+async def set_webhook():
+    try:
+        await bot_app.bot.set_webhook(url=WEBHOOK_URL)
+        logger.info(f"Webhook set to {WEBHOOK_URL}")
+    except TelegramError as e:
+        logger.error(f"Failed to set webhook: {e}")
 
 if __name__ == "__main__":
-    # Create a new event loop explicitly
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    # Run with polling instead of webhook for local testing
-    bot_app.run_polling()
+    if os.getenv("RENDER"):
+        loop.run_until_complete(set_webhook())
+        bot_app.run_polling()  # Fallback for Render
+    else:
+        bot_app.run_polling()
