@@ -1,3 +1,11 @@
+<<<<<<< HEAD
 node_modules/
 venv/
 *.env
+=======
+.env
+users.db
+__pycache__
+*.pyc
+venv/
+>>>>>>> d10f66595d5818c6cfd8f0faa1d5073322214b75
