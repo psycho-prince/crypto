@@ -1,0 +1,84 @@
+body {
+  background: linear-gradient(to right, #1a202c, #2d3748);
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cell {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #444;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s, transform 0.2s;
+  background-color: #222;
+  color: white;
+}
+
+.cell.player1 { background-color: #ff4d4d; }
+.cell.player2 { background-color: #4d79ff; }
+.cell.player3 { background-color: #4dff4d; }
+.cell.player4 { background-color: #ffff4d; }
+.cell.player5 { background-color: #ff4dff; }
+.cell.player6 { background-color: #4dffff; }
+.cell.player7 { background-color: #ff944d; }
+.cell.player8 { background-color: #b94dff; }
+
+.cell:hover {
+  background-color: #333;
+}
+
+.cell.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.cell.explode {
+  animation: explode 0.5s ease-in-out;
+}
+
+@keyframes explode {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+
+.avatar-frame {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid #ccc;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+}
+
+.avatar-frame.player1 { background-color: #ff4d4d; color: white; }
+.avatar-frame.player2 { background-color: #4d79ff; color: white; }
+.avatar-frame.player3 { background-color: #4dff4d; color: white; }
+.avatar-frame.player4 { background-color: #ffff4d; color: black; }
+.avatar-frame.player5 { background-color: #ff4dff; color: white; }
+.avatar-frame.player6 { background-color: #4dffff; color: black; }
+.avatar-frame.player7 { background-color: #ff944d; color: white; }
+.avatar-frame.player8 { background-color: #b94dff; color: white; }
+.avatar-frame.empty { background-color: #f0f0f0; }
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  display: none;
+}
