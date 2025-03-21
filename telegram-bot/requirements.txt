@@ -1,4 +1,4 @@
 TELEGRAM_TOKEN==7332706769:AAHC0u5XMHOrLukqkwGw9wSNv-L5UIjH--U
-WEBHOOK_URL=https://chain-reaction-bot.onrender.com/webhook
+WEBHOOK_URL=https://chain-reaction-bot.onrender.com
 BACKEND_URL=http://localhost:5000
 FRONTEND_URL=http://localhost:3000
